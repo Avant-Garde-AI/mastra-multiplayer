@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import type { EventBus } from "../bus/event-bus.js";
+import type { MultiplayerBus } from "../bus/bus.js";
 import type { MultiplayerStore } from "../storage/index.js";
 import type {
   ApprovalDecision,
@@ -72,7 +72,7 @@ function stableStringify(value: unknown): string {
 export class ApprovalGate {
   constructor(
     private readonly store: MultiplayerStore,
-    private readonly bus: EventBus,
+    private readonly bus: MultiplayerBus,
     private readonly defaultPolicy: ApprovalPolicy = { name: "default" },
   ) {}
 
@@ -107,7 +107,7 @@ export class ApprovalGate {
       policy: policy.name,
     });
 
-    this.bus.publish({
+    await this.bus.publish({
       type: "approval.requested",
       sessionId: request.sessionId,
       request,
@@ -164,7 +164,7 @@ export class ApprovalGate {
       status,
     });
 
-    this.bus.publish({
+    await this.bus.publish({
       type: resolved ? "approval.resolved" : "approval.updated",
       sessionId: request.sessionId,
       request,
@@ -195,7 +195,7 @@ export class ApprovalGate {
     request.status = status;
     request.resolvedAt = Date.now();
     await this.store.saveApproval(request);
-    this.bus.publish({
+    await this.bus.publish({
       type: "approval.resolved",
       sessionId: request.sessionId,
       request,

@@ -85,8 +85,10 @@ room can always stop its own agent, but note it is not role-gated.
 - **Nothing survives a process restart.** The queue and pending windows are in
   memory. A restart mid-turn loses the queue silently.
 - **Nothing coordinates across processes.** Two instances will each run a turn
-  for the same session. Session affinity at the load balancer is the interim
-  answer; see [R1](./ROADMAP.md#r1--redis-backed-eventbus).
+  for the same session. `RedisEventBus` shares *events* between processes, not
+  turn-taking — every instance sees every message, and each decides
+  independently whether to run the agent. Session affinity at the load balancer
+  is the answer today; a distributed `TurnController` is not built.
 - **Messages are published to the room before the mode is applied.** Everyone
   sees every message in the transcript even when the agent skips or debounces
   it away. This is intentional — humans should see what other humans said —

@@ -78,7 +78,7 @@ describe("MultiplayerSession", () => {
     await mp.join(session.id, person("alice"));
     await mp.send({ sessionId: session.id, participantId: "alice", text: "hi" });
 
-    const replayed = mp.bus.replay(session.id, 0);
+    const replayed = await mp.bus.replay(session.id, 0);
     expect(replayed.length).toBeGreaterThan(0);
     expect(replayed.map((e) => e.seq)).toEqual(
       [...replayed].map((_, i) => i + 1),

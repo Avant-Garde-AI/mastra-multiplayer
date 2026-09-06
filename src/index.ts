@@ -7,6 +7,7 @@ export * from "./presence/index.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventBusOptions } from "./bus/event-bus.js";
 export * from "./bus/events.js";
+export type { MultiplayerBus, PublishInput } from "./bus/bus.js";
 export {
   InMemoryMultiplayerStore,
   type MultiplayerStore,

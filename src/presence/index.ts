@@ -1,5 +1,5 @@
 import { unrefTimer } from "../internal/timers.js";
-import type { EventBus } from "../bus/event-bus.js";
+import type { MultiplayerBus } from "../bus/bus.js";
 import type { MultiplayerStore } from "../storage/index.js";
 import type {
   ParticipantId,
@@ -36,7 +36,7 @@ export class PresenceManager {
 
   constructor(
     private readonly store: MultiplayerStore,
-    private readonly bus: EventBus,
+    private readonly bus: MultiplayerBus,
     options: PresenceOptions = {},
   ) {
     this.idleAfterMs = options.idleAfterMs ?? 30_000;
@@ -76,7 +76,7 @@ export class PresenceManager {
    */
   async leave(sessionId: SessionId, participantId: ParticipantId): Promise<void> {
     await this.store.clearPresence(sessionId, participantId);
-    this.bus.publish({
+    await this.bus.publish({
       type: "participant.left",
       sessionId,
       participantId,
@@ -153,7 +153,7 @@ export class PresenceManager {
 
   private async broadcast(sessionId: SessionId): Promise<PresenceState[]> {
     const presence = await this.store.listPresence(sessionId);
-    this.bus.publish({ type: "presence.updated", sessionId, presence });
+    await this.bus.publish({ type: "presence.updated", sessionId, presence });
     return presence;
   }
 }
