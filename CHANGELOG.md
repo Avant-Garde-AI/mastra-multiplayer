@@ -35,6 +35,24 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Event bus
+- `RedisEventBus` (`mastra-multiplayer/bus/redis`) — a shared bus for
+  deployments running more than one process (`R1`). `ioredis` is an optional
+  peer dependency; clients are passed in and typed structurally.
+- New `MultiplayerBus` interface, implemented by both `EventBus` and
+  `RedisEventBus`. `createMultiplayer({ bus })` accepts either options for the
+  in-process bus or a bus instance.
+- New `subscribeFrom(sessionId, afterSeq, handler)`: replay and subscribe with
+  no gap. Replay-then-subscribe drops what lands in between;
+  subscribe-then-replay delivers live events ahead of older ones, which a client
+  tracking its highest sequence discards as stale.
+
+  **Breaking:** `publish`, `replay`, `currentSeq`, and `clear` are now async.
+  A synchronous `publish` would have forced fire-and-forget sequence
+  allocation across processes, and two instances minting the same `seq` makes
+  clients silently drop real events. `await` them; the SSE route now uses
+  `subscribeFrom`.
+
 ### Storage
 - `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) — a durable
   store on LibSQL/SQLite/Turso (`R3`). `@libsql/client` is an optional peer
@@ -108,7 +126,8 @@ Initial scaffold.
 - Removed `.npmignore`, which npm ignores when `files` is present.
 
 ### Known gaps
-- Single-process bus and store.
+- `TurnController` is not distributed: two instances each run a turn for the
+  same session. Use session affinity at the load balancer.
 - No CRDT/co-editing layer.
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).

@@ -122,10 +122,39 @@ announces a departure; `disconnected()` only clears presence.
 The full list, with reasoning, is in the roadmap's
 [Deliberately not doing](./ROADMAP.md#deliberately-not-doing) section.
 
-## What is not here yet
+## Running more than one process
 
-Everything above describes one process. `EventBus`, `TurnController`, and
-`InMemoryMultiplayerStore` all hold state in memory, so a second instance splits
-the room in half. Making that work is the `0.2.0` milestone — the interfaces
-were shaped for it, and nothing outside `src/bus/` depends on how the bus fans
-out. See [ROADMAP](./ROADMAP.md#now--the-020-milestone).
+Two of the three single-process limits are gone. `LibSQLMultiplayerStore` makes
+storage durable and shared; `RedisEventBus` makes the event bus shared. Both are
+swapped in at construction — nothing outside `src/bus/` or `src/storage/` knows
+which implementation it has.
+
+```ts
+createMultiplayer({
+  agent,
+  store: new LibSQLMultiplayerStore(createClient({ url })),
+  bus: new RedisEventBus({ client, subscriber }),
+});
+```
+
+**Sequencing is the hard part of a distributed bus, not fan-out.** Every client
+discards events at or below the highest `seq` it has seen, so two instances
+minting the same number would make clients throw away real events while
+believing they were duplicates — a silent failure, and worse than the
+limitation it replaces. The sequence therefore comes from a Redis `INCR` inside
+the same Lua script that appends to the replay list and publishes, so ordering
+cannot diverge from numbering.
+
+This is why `MultiplayerBus.publish` is async. A synchronous signature would
+have forced fire-and-forget sequence allocation, and errors would vanish.
+
+`subscribeFrom(sessionId, afterSeq, handler)` exists for the same reason:
+replaying and then subscribing drops whatever is published in between, and
+subscribing and then replaying delivers live events ahead of older ones, which a
+client tracking its highest sequence will discard as stale. Both lose data
+quietly, so the bus owns the transition rather than documenting an ordering rule
+for callers to get wrong.
+
+**`TurnController` is still per-process.** Two instances will each run a turn
+for the same session. Session affinity at the load balancer is the interim
+answer; see [ROADMAP](./ROADMAP.md).

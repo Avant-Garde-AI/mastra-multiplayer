@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · Phases 0–2 shipped
+Last gardened: 2026-09-06 · against `0.1.0` · the `0.2.0` milestone is complete
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -28,10 +28,16 @@ scheduled.
 
 ## Now — the `0.2.0` milestone
 
-The theme is **surviving a second process**. Everything in `0.1.0` assumes one
-Node process holding all state in memory. That is fine for a demo and fatal for
-a deploy, and it is the single thing most likely to make an early adopter
-abandon the package.
+**Complete.** All six items shipped.
+
+The theme was **surviving a second process**. Everything in `0.1.0` assumed one
+Node process holding all state in memory — fine for a demo, fatal for a deploy,
+and the single thing most likely to make an early adopter abandon the package.
+
+What remains single-process is `TurnController`: two instances each run a turn
+for the same session, so a deployment needs session affinity at the load
+balancer. That is a smaller and better-understood problem than the three this
+milestone closed, and it is written up as R14 below rather than left implicit.
 
 ### Sequencing
 
@@ -73,22 +79,61 @@ tested, authorized, durable surface.
 
 ### R1 · Redis-backed `EventBus`
 
-`next` · size `L` · confidence `high`
+`shipped` · size `L` · confidence `high`
 
 **Problem.** `EventBus` fans out in-process. Behind two server instances, a
 message published on instance A never reaches the SSE stream held open on
 instance B. Half the room sees the conversation.
 
-**Done when** a `RedisEventBus` implements `publish` / `subscribe` / `replay` /
-`currentSeq`, sequence numbers are allocated atomically per session
-(`INCR`, not read-modify-write), the replay buffer lives in a capped Redis list,
-and a test runs two bus instances against one Redis and asserts an event
-published on one arrives in order on the other.
+**Shipped.** `RedisEventBus` (`mastra-multiplayer/bus/redis`), behind a new
+`MultiplayerBus` interface that `EventBus` also implements. `ioredis` is an
+optional peer dependency imported by nothing — clients are passed in and typed
+structurally.
 
-**Notes.** The interface was designed for this — nothing outside
-`src/bus/` depends on the implementation. The hard part is sequencing, not
-fan-out: seq must be allocated by Redis or two instances will mint the same
-number and clients will silently drop half the events.
+The note above was right about where the difficulty is. Three things followed
+from it:
+
+- **`publish` is now async**, and so are `replay`, `currentSeq`, and `clear`.
+  A synchronous signature would have forced fire-and-forget sequence
+  allocation, and errors would have vanished. Breaking, and worth it.
+- **Sequence, replay-append, and publish happen in one Lua script.** Separate
+  commands would let two publishers append in a different order than they took
+  their sequence numbers, so a reconnecting client replays out of order. The
+  script splices `"seq":N` into the already-serialized payload rather than
+  re-encoding it — `cjson` cannot round-trip an empty array, and
+  `presence.updated` legitimately carries one.
+- **`subscribeFrom(sessionId, afterSeq, handler)` is a new primitive.**
+  Replay-then-subscribe drops what lands in between; subscribe-then-replay
+  delivers live events ahead of older ones, which a client tracking its highest
+  sequence discards as stale. The bus owns the transition rather than
+  documenting an ordering rule for callers to get wrong.
+
+Tested against a real Redis, not a fake — the guarantee is a property of Redis,
+so a fake would only be checking our own assumptions. CI runs a Redis service
+and **fails rather than skips** if it is unreachable; a silent skip would delete
+the only coverage of the thing this class exists for.
+
+Mutation-checked. Allocating the sequence in process memory instead of `INCR`
+fails four tests, including the 100-publish two-instance race. Re-encoding the
+payload with `cjson` fails the empty-array test. Both wrong orderings of
+subscribe/replay fail the mid-replay test.
+
+Two things found while building it, both worth recording:
+
+- A flaky test (1 run in 3) turned out to be a real bug in `attach()`: it
+  populated the channel map *before* awaiting `SUBSCRIBE`, so a concurrent
+  caller saw the entry and returned while the subscription was still in flight.
+  In-flight subscribes are now memoized per channel. Re-running until green
+  would have shipped it.
+- The first version of the mid-replay test passed against the broken
+  implementation — it published before the replay list had been read, so the
+  event landed in the replay itself. It now blocks until the read has happened,
+  and catches both wrong orderings.
+
+**Still not distributed: `TurnController`.** Every instance sees every message
+and each decides independently whether to run the agent, so two instances will
+run the same turn twice. Session affinity at the load balancer is the answer
+today.
 
 ### R2 · Persisted approval policies
 
@@ -257,6 +302,27 @@ Deliberately left out of the launch-review pass because CI configuration is a
 choice about the project's infrastructure rather than a cleanup.
 
 ## Next — after `0.2.0`
+
+### R14 · Distributed turn-taking
+
+`later` · size `L` · confidence `medium`
+
+`RedisEventBus` shares events between instances; it does not share turn-taking.
+Every instance sees every message and each decides independently whether to run
+the agent, so two instances answer the same message twice — visibly, in the
+transcript.
+
+Session affinity at the load balancer avoids it and is what the docs currently
+recommend. That is a real answer, not a placeholder: it costs nothing and fails
+only when an instance dies mid-session.
+
+A proper fix needs a lease — a short-lived Redis lock per session that one
+instance holds while running a turn, renewed while streaming and released at the
+end, with a timeout so a crashed holder does not wedge the room. The reason
+confidence is only medium is that a lease introduces its own failure mode: a
+holder that stalls without dying leaves the session mute until the lease
+expires, which may be worse than a duplicate reply. Worth measuring against real
+usage before building.
 
 ### R6 · Workflow step factory for gates
 

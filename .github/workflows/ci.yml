@@ -17,6 +17,20 @@ jobs:
   check:
     name: check (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+
+    # The Redis bus tests run against a real server rather than a fake — the
+    # guarantee they check (sequence allocation across processes) is a property
+    # of Redis, so a fake would be checking my own assumptions.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6399:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     strategy:
       fail-fast: false
       matrix:

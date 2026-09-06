@@ -197,20 +197,26 @@ export function multiplayerRoutes(
         const encoder = new TextEncoder();
         let unsubscribe: (() => void) | null = null;
         let heartbeat: ReturnType<typeof setInterval> | null = null;
+        let cancelled = false;
 
         const stream = new ReadableStream<Uint8Array>({
-          start: (controller) => {
-            for (const event of session.bus.replay(sessionId, afterSeq)) {
-              controller.enqueue(encoder.encode(sseFrame(event)));
-            }
-
-            unsubscribe = session.bus.subscribe(sessionId, (event) => {
-              try {
-                controller.enqueue(encoder.encode(sseFrame(event)));
-              } catch {
-                // Stream already closed by the client.
-              }
-            });
+          // `start` may return a promise, and the stream waits for it — so the
+          // first frame is not written until the subscription is live.
+          start: async (controller) => {
+            // Replay and subscribe as one operation. Doing them separately
+            // drops whatever is published in between, which a distributed bus
+            // makes likely rather than theoretical.
+            unsubscribe = await session.bus.subscribeFrom(
+              sessionId,
+              afterSeq,
+              (event) => {
+                try {
+                  controller.enqueue(encoder.encode(sseFrame(event)));
+                } catch {
+                  // Stream already closed by the client.
+                }
+              },
+            );
 
             // Comment frames keep proxies from closing an idle connection.
             heartbeat = setInterval(() => {
@@ -221,8 +227,16 @@ export function multiplayerRoutes(
               }
             }, 15_000);
             unrefTimer(heartbeat);
+
+            if (cancelled) {
+              // The client hung up while the subscription was being set up.
+              unsubscribe?.();
+              clearInterval(heartbeat);
+            }
           },
           cancel: () => {
+            // `start` may still be resolving; whichever finishes last cleans up.
+            cancelled = true;
             unsubscribe?.();
             if (heartbeat) clearInterval(heartbeat);
             // A closed stream is a dropped transport, not a departure. Clear
@@ -262,7 +276,7 @@ export function multiplayerRoutes(
           approvals,
           // The sequence this snapshot is consistent with. Reconnect the
           // stream from here and no event is seen twice or missed.
-          seq: session.bus.currentSeq(sessionId),
+          seq: await session.bus.currentSeq(sessionId),
         });
       },
     },

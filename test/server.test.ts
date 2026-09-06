@@ -375,7 +375,7 @@ describe("multiplayerRoutes", () => {
       expect(body.participants.map((p: Participant) => p.id)).toEqual(["alice"]);
       expect(body.presence).toHaveLength(1);
       expect(body.approvals).toHaveLength(1);
-      expect(body.seq).toBe(multiplayer.bus.currentSeq("s1"));
+      expect(body.seq).toBe(await multiplayer.bus.currentSeq("s1"));
     });
 
     it("returns a seq that replays nothing — the snapshot is already current", async () => {
@@ -383,7 +383,7 @@ describe("multiplayerRoutes", () => {
       await call(routes, "POST", "/join");
 
       const body = (await call(routes, "GET", "/state")).json as { seq: number };
-      expect(multiplayer.bus.replay("s1", body.seq)).toEqual([]);
+      expect(await multiplayer.bus.replay("s1", body.seq)).toEqual([]);
     });
 
     it("403s rather than 404s for a session that does not exist", async () => {
@@ -413,14 +413,16 @@ describe("multiplayerRoutes", () => {
 
   describe("GET /stream", () => {
     /** Publishes a message and returns the sequence it landed on. */
-    const say = (multiplayer: any, text: string) =>
-      multiplayer.bus.publish({
-        type: "message",
-        sessionId: "s1",
-        participantId: "alice",
-        text,
-        fromAgent: false,
-      }).seq;
+    const say = async (multiplayer: any, text: string) =>
+      (
+        await multiplayer.bus.publish({
+          type: "message",
+          sessionId: "s1",
+          participantId: "alice",
+          text,
+          fromAgent: false,
+        })
+      ).seq;
 
     it("sets the headers proxies need to not buffer the stream", async () => {
       const { routes } = await setup();
@@ -435,7 +437,7 @@ describe("multiplayerRoutes", () => {
 
     it("frames each event with its sequence as the SSE id and its type as the name", async () => {
       const { multiplayer, routes } = await setup();
-      const seq = say(multiplayer, "hello");
+      const seq = await say(multiplayer, "hello");
 
       const response = await call(routes, "GET", "/stream", {
         // Skip the join's own events so the message is the first frame.
@@ -451,9 +453,9 @@ describe("multiplayerRoutes", () => {
 
     it("replays only what the client missed, per Last-Event-ID", async () => {
       const { multiplayer, routes } = await setup();
-      const first = say(multiplayer, "one");
-      say(multiplayer, "two");
-      say(multiplayer, "three");
+      const first = await say(multiplayer, "one");
+      await say(multiplayer, "two");
+      await say(multiplayer, "three");
 
       const response = await call(routes, "GET", "/stream", {
         headers: { "last-event-id": String(first) },
@@ -465,8 +467,8 @@ describe("multiplayerRoutes", () => {
 
     it("accepts ?lastSeq= for the initial open, where no header exists yet", async () => {
       const { multiplayer, routes } = await setup();
-      const first = say(multiplayer, "one");
-      say(multiplayer, "two");
+      const first = await say(multiplayer, "one");
+      await say(multiplayer, "two");
 
       const response = await call(routes, "GET", "/stream", {
         query: { lastSeq: String(first) },
@@ -478,9 +480,9 @@ describe("multiplayerRoutes", () => {
 
     it("prefers Last-Event-ID over ?lastSeq=, since the header is the live cursor", async () => {
       const { multiplayer, routes } = await setup();
-      say(multiplayer, "one");
-      const second = say(multiplayer, "two");
-      say(multiplayer, "three");
+      await say(multiplayer, "one");
+      const second = await say(multiplayer, "two");
+      await say(multiplayer, "three");
 
       const response = await call(routes, "GET", "/stream", {
         headers: { "Last-Event-ID": String(second) },
@@ -495,11 +497,11 @@ describe("multiplayerRoutes", () => {
       const { multiplayer, routes } = await setup();
       const response = await call(routes, "GET", "/stream", {
         // Start past the join's events so the first frame is the live one.
-        query: { lastSeq: String(multiplayer.bus.currentSeq("s1")) },
+        query: { lastSeq: String(await multiplayer.bus.currentSeq("s1")) },
       });
 
       const frames = readFrames(response.stream!, 1);
-      say(multiplayer, "live");
+      await say(multiplayer, "live");
 
       expect(parseFrame((await frames)[0]!).data?.text).toBe("live");
     });

@@ -1,5 +1,6 @@
 import type { SessionId } from "../types.js";
 import type { EventHandler, MultiplayerEvent } from "./events.js";
+import type { MultiplayerBus, PublishInput } from "./bus.js";
 
 export interface EventBusOptions {
   /**
@@ -10,20 +11,6 @@ export interface EventBusOptions {
 }
 
 /**
- * `Omit` collapses a union into its common keys. This distributes over each
- * member instead, so `publish({ type: "agent.delta", runId, delta })` keeps
- * its own fields.
- */
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
-  ? Omit<T, K>
-  : never;
-
-type PublishInput = DistributiveOmit<MultiplayerEvent, "seq" | "at"> & {
-  seq?: number;
-  at?: number;
-};
-
-/**
  * In-process pub/sub for a shared session.
  *
  * This is deliberately the smallest thing that works: one Node process, one
@@ -31,7 +18,7 @@ type PublishInput = DistributiveOmit<MultiplayerEvent, "seq" | "at"> & {
  * implementation of the same shape — the rest of the package only depends on
  * `publish` / `subscribe` / `replay`.
  */
-export class EventBus {
+export class EventBus implements MultiplayerBus {
   private handlers = new Map<SessionId, Set<EventHandler>>();
   private buffers = new Map<SessionId, MultiplayerEvent[]>();
   private sequences = new Map<SessionId, number>();
@@ -41,8 +28,13 @@ export class EventBus {
     this.replayBufferSize = options.replayBufferSize ?? 200;
   }
 
-  /** Assigns the next sequence number, buffers, and fans out to subscribers. */
-  publish(input: PublishInput): MultiplayerEvent {
+  /**
+   * Assigns the next sequence number, buffers, and fans out to subscribers.
+   *
+   * Async to satisfy `MultiplayerBus`, though nothing here yields — the whole
+   * point of this implementation is that there is no round trip.
+   */
+  async publish(input: PublishInput): Promise<MultiplayerEvent> {
     const seq = input.seq ?? this.nextSeq(input.sessionId);
     const event = {
       ...input,
@@ -85,9 +77,33 @@ export class EventBus {
   }
 
   /** Events after `afterSeq`, oldest first. Used on reconnect. */
-  replay(sessionId: SessionId, afterSeq = 0): MultiplayerEvent[] {
+  async replay(sessionId: SessionId, afterSeq = 0): Promise<MultiplayerEvent[]> {
     const buffer = this.buffers.get(sessionId) ?? [];
     return buffer.filter((event) => event.seq > afterSeq);
+  }
+
+  /**
+   * Replay and subscribe with nothing able to slip between them.
+   *
+   * In one process this needs no buffering — the subscription is registered and
+   * the buffer read without yielding, so no publish can interleave. Awaiting
+   * between the two steps, as a caller doing it by hand would, is exactly what
+   * opens the gap.
+   */
+  async subscribeFrom(
+    sessionId: SessionId,
+    afterSeq: number,
+    handler: EventHandler,
+  ): Promise<() => void> {
+    const unsubscribe = this.subscribe(sessionId, (event) => {
+      if (event.seq > afterSeq) handler(event);
+    });
+
+    for (const event of this.buffers.get(sessionId) ?? []) {
+      if (event.seq > afterSeq) handler(event);
+    }
+
+    return unsubscribe;
   }
 
   /**
@@ -95,7 +111,7 @@ export class EventBus {
    * now is consistent with this number, so a client can reconnect the stream
    * from it and neither miss an event nor apply one twice.
    */
-  currentSeq(sessionId: SessionId): number {
+  async currentSeq(sessionId: SessionId): Promise<number> {
     return this.sequences.get(sessionId) ?? 0;
   }
 
@@ -104,7 +120,7 @@ export class EventBus {
   }
 
   /** Drops all buffered events and subscribers for a session. */
-  clear(sessionId: SessionId): void {
+  async clear(sessionId: SessionId): Promise<void> {
     this.handlers.delete(sessionId);
     this.buffers.delete(sessionId);
     this.sequences.delete(sessionId);

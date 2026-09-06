@@ -9,6 +9,7 @@ export default defineConfig({
     "src/storage/index.ts",
     "src/storage/conformance.ts",
     "src/storage/libsql.ts",
+    "src/bus/redis.ts",
   ],
   format: ["esm"],
   dts: true,
@@ -16,5 +17,5 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   target: "es2022",
-  external: ["@mastra/core", "react", "hono", "@libsql/client"],
+  external: ["@mastra/core", "react", "hono", "@libsql/client", "ioredis"],
 });

@@ -17,7 +17,8 @@ CI runs all of it on Node 20 and 22 for every push and pull request.
 ## Conventions
 
 - Everything in `src/` is dependency-free except for `node:crypto`. Mastra,
-  React, and `@libsql/client` are peer dependencies and must stay optional — the
+  React, `@libsql/client`, and `ioredis` are peer dependencies and must stay
+  optional — the
   core primitives are testable without any of them installed. A driver import
   belongs in its own subpath module, never on a path the root entry point
   reaches.
@@ -50,6 +51,21 @@ Docs live in [`docs/`](./docs) and are part of the change, not a follow-up.
   a [decision record](./docs/decisions). Include what it costs and what would
   reopen it — a record with no downsides listed is a justification, not a
   decision.
+
+## Testing against real infrastructure
+
+The Redis bus is tested against a real `redis-server`, not a fake. The guarantee
+it makes — that a sequence is never issued twice across processes — is a
+property of Redis, so a fake would only be checking our own assumptions.
+
+`redis-server --port 6399` locally; CI runs a service container. The tests skip
+with a warning when Redis is unreachable, **except under `CI`, where they fail**
+— a silent skip there would quietly delete the only coverage of the thing the
+class exists for.
+
+Same reasoning applies to the LibSQL store: real SQLite, and one test that
+reopens an actual file, because an in-memory database passes every other test
+in the file without proving durability.
 
 ## Naming
 

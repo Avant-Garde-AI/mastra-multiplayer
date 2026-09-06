@@ -92,6 +92,20 @@ Three properties worth knowing about:
 
 A sequenced, per-session pub/sub with a replay buffer. Clients reconnect with `Last-Event-ID` and receive only what they missed, rather than replaying the whole session or silently dropping events.
 
+`EventBus` runs in one process. For a deployment behind a load balancer, swap in `RedisEventBus` and every instance shares the room:
+
+```ts
+import { RedisEventBus } from "mastra-multiplayer/bus/redis";
+
+createMultiplayer({
+  agent,
+  store,
+  bus: new RedisEventBus({ client: new Redis(url), subscriber: new Redis(url) }),
+});
+```
+
+Sequencing, not fan-out, is the hard part: clients discard events at or below the highest sequence they have seen, so two instances minting the same number would make them throw away real events while believing they were duplicates. The sequence comes from a Redis `INCR` inside the same script that records and publishes.
+
 Events: `participant.joined`, `participant.left`, `presence.updated`, `message`, `agent.delta`, `agent.run.started|finished|interrupted`, `approval.requested|updated|resolved`.
 
 ## Concurrency: what happens when two people type at once
@@ -187,7 +201,7 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 ## Known limitations
 
-- **Single process.** `EventBus` and `TurnController` hold state in memory, so a second instance splits the room in half. Storage is solved — `LibSQLMultiplayerStore` is durable — but the bus is not yet.
+- **Turn-taking is per-process.** `RedisEventBus` and `LibSQLMultiplayerStore` make events and storage shared, but `TurnController` is not distributed: two instances will each run a turn for the same session. Use session affinity at the load balancer.
 - **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
 - **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.

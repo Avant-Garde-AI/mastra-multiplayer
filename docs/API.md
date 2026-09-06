@@ -12,6 +12,7 @@ Every exported symbol, by entry point. Types are in
 | `mastra-multiplayer/storage` | `MultiplayerStore`, `InMemoryMultiplayerStore` |
 | `mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
 | `mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
+| `mastra-multiplayer/bus/redis` | `RedisEventBus` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
 `src/` imports either — Mastra and Hono types are declared structurally
@@ -25,10 +26,11 @@ interface MultiplayerOptions {
   agent: AgentLike;
   agentId?: string;
   store?: MultiplayerStore;          // default InMemoryMultiplayerStore
-  bus?: EventBusOptions;
+  bus?: EventBusOptions | MultiplayerBus;
   presence?: PresenceOptions;
   concurrency?: TurnControllerOptions;
   defaultApprovalPolicy?: ApprovalPolicy;
+  // `bus` takes either options for the in-process bus, or a bus instance.
   buildStreamOptions?: (context: TurnContext) => Record<string, unknown>;
 }
 ```
@@ -148,14 +150,49 @@ rendered unlabelled rather than guessed at.
 
 ## Event bus
 
-`EventBus` — `publish`, `subscribe` (→ unsubscribe fn), `replay(sessionId,
-afterSeq?)`, `currentSeq(sessionId)`, `subscriberCount`, `clear`.
+`MultiplayerBus` is the interface; `EventBus` (in-process) and `RedisEventBus`
+(multi-process) implement it.
 
-`EventBusOptions.replayBufferSize` defaults to 200; `0` disables replay while
-sequencing continues.
+| Method | Notes |
+| --- | --- |
+| `publish(input)` | → `Promise<MultiplayerEvent>`. Assigns the sequence, records for replay, fans out. |
+| `subscribe(sessionId, handler)` | → unsubscribe fn. **Synchronous return**, so teardown paths that cannot await still work. |
+| `subscribeFrom(sessionId, afterSeq, handler)` | → `Promise<unsubscribe>`. Replay and subscribe with no gap. **Use this** to resume a client. |
+| `replay(sessionId, afterSeq?)` | → `Promise<MultiplayerEvent[]>`, oldest first. |
+| `currentSeq(sessionId)` | → `Promise<number>`. What a snapshot is consistent with. |
+| `subscriberCount(sessionId)` | Local count. Never a cluster-wide total. |
+| `clear(sessionId)` | → `Promise<void>`. |
 
-`publish` assigns the sequence, buffers, and fans out. A subscriber that throws
-is logged and does not stop delivery to the others.
+Everything that could need a round trip is async, `publish` included — a bus
+that allocated sequences without awaiting could hand two events the same `seq`
+across processes, and clients would silently drop half of what they were sent.
+
+`replayBufferSize` defaults to 200 on both; `0` disables replay while sequencing
+continues. A subscriber that throws is logged and does not stop delivery to the
+others.
+
+### `RedisEventBus`
+
+```ts
+import { Redis } from "ioredis";
+import { RedisEventBus } from "mastra-multiplayer/bus/redis";
+
+const bus = new RedisEventBus({
+  client: new Redis(url),
+  subscriber: new Redis(url),   // must be a separate connection
+  keyPrefix: "mp",              // default
+  replayBufferSize: 200,        // default
+  onError: (error, context) => log.warn({ error, context }),
+});
+```
+
+`subscriber` must be its own connection — Redis refuses ordinary commands on a
+connection that has subscribed, so passing the same client twice deadlocks the
+first time anything is published.
+
+`ioredis` is an optional peer dependency, imported by nothing: the clients are
+passed in and typed structurally (`RedisLikeClient`, `RedisLikeSubscriber`), so
+any client of the same shape works.
 
 Event shapes: [HTTP-API](./HTTP-API.md#event-frames).
 

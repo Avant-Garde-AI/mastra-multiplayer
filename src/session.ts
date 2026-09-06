@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ApprovalGate, type ApprovalPolicy } from "./approvals/index.js";
 import { labelBatch, withMultiplayerContext } from "./attribution/index.js";
 import { EventBus, type EventBusOptions } from "./bus/event-bus.js";
+import type { MultiplayerBus } from "./bus/bus.js";
 import { TurnController, type Turn, type TurnControllerOptions } from "./concurrency/index.js";
 import { PresenceManager, type PresenceOptions } from "./presence/index.js";
 import { InMemoryMultiplayerStore, type MultiplayerStore } from "./storage/index.js";
@@ -34,7 +35,11 @@ export interface MultiplayerOptions {
   agent: AgentLike;
   agentId?: string;
   store?: MultiplayerStore;
-  bus?: EventBusOptions;
+  /**
+   * Options for the built-in in-process bus, or a bus instance to use instead
+   * — `RedisEventBus` for a deployment running more than one process.
+   */
+  bus?: EventBusOptions | MultiplayerBus;
   presence?: PresenceOptions;
   concurrency?: TurnControllerOptions;
   /** Policy applied when a tool requests approval without naming one. */
@@ -61,7 +66,7 @@ export interface TurnContext {
  * independent pieces you can also use on their own.
  */
 export class MultiplayerSession {
-  readonly bus: EventBus;
+  readonly bus: MultiplayerBus;
   readonly store: MultiplayerStore;
   readonly presence: PresenceManager;
   readonly approvals: ApprovalGate;
@@ -75,7 +80,10 @@ export class MultiplayerSession {
     this.agent = options.agent;
     this.agentId = options.agentId ?? options.agent.id ?? options.agent.name ?? "agent";
     this.store = options.store ?? new InMemoryMultiplayerStore();
-    this.bus = new EventBus(options.bus);
+    this.bus =
+      options.bus && "publish" in options.bus
+        ? options.bus
+        : new EventBus(options.bus);
     this.presence = new PresenceManager(this.store, this.bus, options.presence);
     this.approvals = new ApprovalGate(
       this.store,
@@ -110,7 +118,7 @@ export class MultiplayerSession {
 
   async join(sessionId: SessionId, participant: Participant): Promise<Participant[]> {
     await this.store.addParticipant(sessionId, participant);
-    this.bus.publish({ type: "participant.joined", sessionId, participant });
+    await this.bus.publish({ type: "participant.joined", sessionId, participant });
     await this.audit(sessionId, "participant.joined", participant.id, {
       surface: participant.surface,
       role: participant.role,
@@ -146,7 +154,7 @@ export class MultiplayerSession {
     };
 
     // Every message is visible to the room, whether or not the agent replies.
-    this.bus.publish({
+    await this.bus.publish({
       type: "message",
       sessionId: message.sessionId,
       participantId: message.participantId,
@@ -163,7 +171,7 @@ export class MultiplayerSession {
   async interrupt(sessionId: SessionId, participantId: ParticipantId): Promise<void> {
     this.turns.interrupt(sessionId);
     const session = await this.store.getSession(sessionId);
-    this.bus.publish({
+    await this.bus.publish({
       type: "agent.run.interrupted",
       sessionId,
       runId: session?.runningRunId ?? "unknown",
@@ -181,7 +189,7 @@ export class MultiplayerSession {
     const signal = this.turns.signalFor(turn.sessionId);
 
     await this.store.updateSession(turn.sessionId, { runningRunId: runId });
-    this.bus.publish({
+    await this.bus.publish({
       type: "agent.run.started",
       sessionId: turn.sessionId,
       runId,
@@ -214,7 +222,7 @@ export class MultiplayerSession {
       for await (const delta of result.textStream) {
         if (signal?.aborted) break;
         full += delta;
-        this.bus.publish({
+        await this.bus.publish({
           type: "agent.delta",
           sessionId: turn.sessionId,
           runId,
@@ -226,7 +234,7 @@ export class MultiplayerSession {
     }
 
     if (full.length > 0) {
-      this.bus.publish({
+      await this.bus.publish({
         type: "message",
         sessionId: turn.sessionId,
         participantId: null,
@@ -235,7 +243,7 @@ export class MultiplayerSession {
       });
     }
 
-    this.bus.publish({
+    await this.bus.publish({
       type: "agent.run.finished",
       sessionId: turn.sessionId,
       runId,
