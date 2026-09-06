@@ -25,9 +25,7 @@ Peer dependencies: `@mastra/core` (optional, for the server routes) and `react` 
 ## Quickstart
 
 ```ts
-import { createMultiplayer, fourEyes } from "mastra-multiplayer";
-import { multiplayerRoutes } from "mastra-multiplayer/server";
-import { registerApiRoute } from "@mastra/core/server";
+import { createMultiplayer } from "mastra-multiplayer";
 
 const multiplayer = createMultiplayer({
   agent: supportAgent,
@@ -135,8 +133,8 @@ That last guideline is the one that earns its place. Without it the model picks 
 Mastra's memory is keyed on `threadId` (per conversation) and `resourceId` (per user, across threads). For a shared session:
 
 - **`threadId`** → the session. Everyone reads and writes the same conversation.
-- **`resourceId`** → convention is `${surface}:${externalId}` (e.g. `slack:U06CK1E9HN2`), stored on each `Participant`. Use it for per-user preferences that should follow a person between sessions.
-- **Working memory** should almost always be `scope: "thread"` in a shared session. Resource-scoped working memory means what one person tells the agent silently follows them out of the room.
+- **`resourceId`** → the *session*, not the person. Each turn passes `memory: { thread: session.threadId, resource: session.id }`, so resource-scoped memory is per-room. That is the right default here — resource-scoped memory keyed to an individual means what one person tells the agent silently follows them out of the room — but note it means `Participant.resourceId` is stored for your own use and by channel adapters, and is not yet read by the library. Override it per turn with `buildStreamOptions` if you need something else.
+- **Working memory** should almost always be `scope: "thread"` in a shared session, for the same reason.
 
 Long shared threads outgrow the context window faster than single-user ones. Mastra's memory processors are the right tool for trimming; this package does not duplicate them.
 
@@ -153,6 +151,7 @@ Long shared threads outgrow the context window faster than single-user ones. Mas
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/multiplayer/sessions/:id/stream` | SSE event stream |
+| `GET` | `/multiplayer/sessions/:id/state` | Roster, presence, and open approvals for a cold start |
 | `POST` | `/multiplayer/sessions/:id/join` | Join the roster |
 | `POST` | `/multiplayer/sessions/:id/leave` | Leave |
 | `POST` | `/multiplayer/sessions/:id/presence` | Heartbeat / typing |
@@ -168,21 +167,35 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 ## Known limitations
 
-- `EventBus` and `InMemoryMultiplayerStore` are single-process. Multi-instance deployments need a Redis or Postgres-backed implementation of the same interfaces.
-- No CRDT layer yet. Live cursors and shared document editing are on the roadmap, not in `0.1.0`.
-- Approval policies are held in memory on the `ApprovalGate` instance, so a restart mid-approval loses the policy and falls back to the default. Persisting the policy alongside the request is the next fix.
-- Long-running approvals rely on polling for expiry. A durable-execution backend (Temporal, Inngest, Restate, Durable Objects) is the right home for gates that stay open for hours.
-- No independent evaluation exists for any of this. Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.
+- **Single process.** `EventBus`, `TurnController`, and `InMemoryMultiplayerStore` all hold state in memory, so a second instance splits the room in half. Multi-instance deployments need Redis or Postgres-backed implementations of the same interfaces.
+- **`authenticate` establishes identity, not membership.** Any authenticated participant can pass any `sessionId` and read that session. Enforce access inside your `authenticate` until this is built in — see [security](./docs/SECURITY.md#no-session-level-authorization).
+- **Approval policies are held in memory** on the `ApprovalGate` instance, so a restart mid-approval falls back to the default — a four-eyes gate silently becomes a one-signature gate. Persisting the policy alongside the request is the next fix.
+- **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
+- **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
+- **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.
+
+## Documentation
+
+Full docs live in [`docs/`](./docs):
+[concepts](./docs/CONCEPTS.md) ·
+[architecture](./docs/ARCHITECTURE.md) ·
+[API](./docs/API.md) ·
+[HTTP & SSE](./docs/HTTP-API.md) ·
+[approvals](./docs/APPROVALS.md) ·
+[concurrency](./docs/CONCURRENCY.md) ·
+[storage](./docs/STORAGE.md) ·
+[security](./docs/SECURITY.md) ·
+[decision records](./docs/decisions)
 
 ## Roadmap
 
-- [ ] Persisted approval policies
-- [ ] Redis-backed `EventBus` and store
-- [ ] Yjs/Automerge shared-state module for live cursors and co-editing
-- [ ] Channel adapters that map Slack/Discord identity onto `Participant`
-- [ ] Workflow step factory wrapping `suspend()`/`resume()` for gates
+`0.2.0` is about surviving a second process: a Redis-backed `EventBus`,
+persisted approval policies, a durable store implementation with a conformance
+suite, tests over the HTTP surface, and session-level authorization.
+
+The full list — including what is deliberately out of scope, and why — is in
+[`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ## License
 
 MIT
-# mastra-multiplayer

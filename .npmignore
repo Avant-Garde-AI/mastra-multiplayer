@@ -1,7 +1,0 @@
-src/
-test/
-examples/
-docs/
-tsup.config.ts
-vitest.config.ts
-tsconfig.json

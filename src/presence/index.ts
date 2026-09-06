@@ -70,6 +70,10 @@ export class PresenceManager {
     return this.heartbeat(sessionId, participantId, typing ? "typing" : "active");
   }
 
+  /**
+   * A participant has left the session for good. Clears presence and tells the
+   * room to drop them from the roster.
+   */
   async leave(sessionId: SessionId, participantId: ParticipantId): Promise<void> {
     await this.store.clearPresence(sessionId, participantId);
     this.bus.publish({
@@ -78,6 +82,24 @@ export class PresenceManager {
       participantId,
     });
     await this.broadcast(sessionId);
+  }
+
+  /**
+   * A transport dropped, but the participant has not left.
+   *
+   * These are different events and conflating them is a bug: an SSE stream
+   * closes on every reconnect, tab switch, and laptop lid, and someone with two
+   * tabs open closes one while still sitting in the session. Publishing
+   * `participant.left` there evicts a person from everyone else's roster while
+   * they are still in the room. Presence is cleared — that is what presence is
+   * for — and the roster is left alone.
+   */
+  async disconnected(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+  ): Promise<PresenceState[]> {
+    await this.store.clearPresence(sessionId, participantId);
+    return this.broadcast(sessionId);
   }
 
   /**

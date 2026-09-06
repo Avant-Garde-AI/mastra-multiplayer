@@ -90,6 +90,15 @@ export class EventBus {
     return buffer.filter((event) => event.seq > afterSeq);
   }
 
+  /**
+   * The highest sequence assigned for this session so far. A snapshot taken
+   * now is consistent with this number, so a client can reconnect the stream
+   * from it and neither miss an event nor apply one twice.
+   */
+  currentSeq(sessionId: SessionId): number {
+    return this.sequences.get(sessionId) ?? 0;
+  }
+
   subscriberCount(sessionId: SessionId): number {
     return this.handlers.get(sessionId)?.size ?? 0;
   }

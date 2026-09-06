@@ -49,6 +49,33 @@ export const DEFAULT_POLICY: Required<
   onExpiry: "deny",
 };
 
+export type ResolvedPolicy = typeof DEFAULT_POLICY;
+
+/**
+ * Layers a policy over the defaults, ignoring keys that are explicitly
+ * `undefined`.
+ *
+ * A plain spread does not do this, and three keys fail badly when it happens —
+ * which it does whenever a policy is assembled from optional config, as in
+ * `fourEyes({ quorum: config.approvers })` with `approvers` unset:
+ *
+ * - `quorum: undefined` makes `approvals.length >= quorum` false forever, so
+ *   the gate never approves.
+ * - `denyIsFinal: undefined` is falsy, so a deny stops resolving the request.
+ * - `allowedRoles: undefined` makes `canVote` throw on `.includes()`.
+ *
+ * Two directions of failure for a governance control, plus a crash, all
+ * reached through ordinary-looking calling code — so it is handled in one
+ * place rather than at every call site.
+ */
+export function mergePolicy(policy: ApprovalPolicy): ResolvedPolicy {
+  const merged: Record<string, unknown> = { ...DEFAULT_POLICY };
+  for (const [key, value] of Object.entries(policy)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged as ResolvedPolicy;
+}
+
 /** Two different people must sign off. The requester is not one of them. */
 export const fourEyes = (overrides: Partial<ApprovalPolicy> = {}): ApprovalPolicy => ({
   name: "four-eyes",
@@ -88,7 +115,7 @@ export function canVote(
   request: ApprovalRequest,
   participant: Participant,
 ): EligibilityResult {
-  const merged = { ...DEFAULT_POLICY, ...policy };
+  const merged = mergePolicy(policy);
 
   if (merged.excludeRequester && participant.id === request.requestedBy) {
     return {
@@ -128,7 +155,7 @@ export function evaluate(
   request: ApprovalRequest,
   now = Date.now(),
 ): ApprovalStatus {
-  const merged = { ...DEFAULT_POLICY, ...policy };
+  const merged = mergePolicy(policy);
 
   if (request.status !== "pending") return request.status;
 
@@ -150,7 +177,7 @@ export function remainingApprovals(
   policy: ApprovalPolicy,
   request: ApprovalRequest,
 ): number {
-  const quorum = policy.quorum ?? DEFAULT_POLICY.quorum;
+  const { quorum } = mergePolicy(policy);
   const approvals = request.votes.filter((v) => v.decision === "approve").length;
   return Math.max(0, quorum - approvals);
 }

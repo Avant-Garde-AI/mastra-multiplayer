@@ -12,11 +12,23 @@
     "sse"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/avant-garde-ai/mastra-multiplayer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avant-garde-ai/mastra-multiplayer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/avant-garde-ai/mastra-multiplayer/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "main": "./dist/index.js",
@@ -41,7 +53,8 @@
     "./storage": {
       "types": "./dist/storage/index.d.ts",
       "import": "./dist/storage/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsup",
@@ -49,7 +62,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "docs:check": "node scripts/check-doc-links.mjs",
+    "lint": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test && npm run docs:check"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0",

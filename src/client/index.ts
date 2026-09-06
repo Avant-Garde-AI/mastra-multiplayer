@@ -83,6 +83,44 @@ export class MultiplayerClient {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Loads the roster, presence, and open approvals for a session that already
+   * exists.
+   *
+   * The replay buffer only covers a network blip. Someone opening a session
+   * that has been running for an hour has no events to replay and would
+   * otherwise render an empty room. The snapshot carries the sequence it is
+   * consistent with, so the stream picks up from exactly there.
+   */
+  async hydrate(): Promise<void> {
+    const url = `${this.baseUrl}${this.basePath}/sessions/${this.options.sessionId}/state`;
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: { ...this.options.headers },
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${await response.text()}`);
+    }
+    const snapshot = (await response.json()) as {
+      participants: Participant[];
+      presence: PresenceState[];
+      approvals: ApprovalRequest[];
+      seq: number;
+    };
+
+    // Only adopt the snapshot's sequence when no stream is open. If one is,
+    // its replay frames may still be in flight below `snapshot.seq`, and
+    // jumping the cursor forward would silently drop them.
+    if (!this.source) {
+      this.lastSeq = Math.max(this.lastSeq, snapshot.seq ?? 0);
+    }
+    this.patch({
+      participants: snapshot.participants ?? [],
+      presence: snapshot.presence ?? [],
+      approvals: snapshot.approvals ?? [],
+    });
+  }
+
   connect(): void {
     if (this.source) return;
     this.openStream();
@@ -101,6 +139,19 @@ export class MultiplayerClient {
 
   async join(): Promise<void> {
     await this.post("/join", {});
+  }
+
+  /**
+   * Join, load the current state, then open the stream — in that order.
+   *
+   * Order matters. Hydrating first means the stream opens from the snapshot's
+   * sequence and replays only what came after it. Connecting first leaves a
+   * window where replayed events and the snapshot race.
+   */
+  async start(): Promise<void> {
+    await this.join();
+    await this.hydrate();
+    this.connect();
   }
 
   async send(text: string, addressedToAgent = true): Promise<void> {
