@@ -28,19 +28,36 @@ Mastra reserves that prefix.
 interface MultiplayerRoutesOptions {
   basePath?: string;
   authenticate: (c: HonoLikeContext) => Promise<Participant | null> | Participant | null;
+  authorize?: (input: AuthorizeInput) => boolean | Promise<boolean>;
+}
+
+interface AuthorizeInput {
+  participant: Participant;
+  sessionId: string;
+  action: MultiplayerAction;   // the route being accessed
+  context: HonoLikeContext;
 }
 ```
 
-`authenticate` runs on every route. Returning `null` yields `401`.
+Both run on every route, in that order.
 
-**It is load-bearing.** Whatever it returns is the identity every message, vote,
-and audit entry is attributed to. It must derive from a verified session — a
-signed cookie, a validated JWT — and never from the request body, or the
-four-eyes rule is decorative. See [SECURITY](./SECURITY.md).
+**`authenticate` is load-bearing.** Whatever it returns is the identity every
+message, vote, and audit entry is attributed to. It must derive from a verified
+session — a signed cookie, a validated JWT — and never from the request body, or
+the four-eyes rule is decorative. Returning `null` yields `401`.
 
-`authenticate` answers *who is this*. Nothing yet answers *may they be in this
-session* — see the [authorization gap](./SECURITY.md#no-session-level-authorization)
-and [R5](./ROADMAP.md#r5--session-membership-authorization).
+**`authorize` decides whether that identity may act on this session.** It
+defaults to roster membership, exempting `join` because the caller cannot
+already be on a roster they are asking to join. Returning false yields `403`
+with `code: "not_a_member"`.
+
+`action` is the route name — `join`, `leave`, `stream`, `state`, `presence`,
+`messages`, `interrupt`, `approvals`, `vote`, `audit` — so individual
+capabilities can be gated separately. A custom hook **replaces** the membership
+rule rather than layering on it: if you supply one, you own that check too.
+
+See [SECURITY](./SECURITY.md#session-level-authorization) for the reasoning and
+the failure modes.
 
 ## Routes
 
@@ -74,8 +91,11 @@ Everything a client needs to render a session that is already in progress.
 ```
 
 `seq` is the sequence the snapshot is consistent with. Open the stream from it
-and you will neither miss an event nor apply one twice. `404` if the session
-does not exist.
+and you will neither miss an event nor apply one twice.
+
+An unknown session returns `403`, not `404` — authorization runs before the
+session is loaded, so the status code cannot be used to discover which session
+ids are real. `404` appears only once authorization has passed.
 
 **Messages are not in the snapshot.** Mastra's memory owns the transcript —
 fetch it through Mastra's own APIs. See
@@ -146,6 +166,7 @@ surfaces, and nothing in the package interprets it.
 | Status | `code` | Meaning |
 | --- | --- | --- |
 | `404` | `not_found` | No such approval |
+| `403` | `not_a_member` | Not authorized for the approval's session |
 | `403` | `not_eligible` | Wrong role, is the requester under four-eyes, or already voted |
 | `403` | `already_resolved` | Resolved before this vote landed |
 
@@ -154,7 +175,9 @@ breaking change to the error contract, so it waits for a release that has
 others.
 
 Note this route is *not* under `/sessions/:sessionId` — an approval id is
-globally unique and carries its own session.
+globally unique and carries its own session. Authorization reads that session
+off the stored approval, never off the request, so a session id supplied by the
+caller cannot widen what they may vote on.
 
 ### `GET /sessions/:sessionId/audit`
 

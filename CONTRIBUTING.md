@@ -25,6 +25,10 @@ CI runs all of it on Node 20 and 22 for every push and pull request.
 - New behaviour needs a test. The approval policy engine in particular is pure
   and has no excuse.
 - Prefer adding a mode or policy over adding a flag to an existing one.
+- Every HTTP route goes through `guard()`, which answers both "who is this" and
+  "may they be here". A route that reads `authenticate` directly has skipped the
+  second question. `test/server.test.ts` asserts that every route reports its
+  action to `authorize`, so a new one that forgets will fail.
 
 ## Documentation
 

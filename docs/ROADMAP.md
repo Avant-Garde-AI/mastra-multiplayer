@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · Phase 0 and R4 shipped
+Last gardened: 2026-09-06 · against `0.1.0` · Phases 0 and 1 shipped
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -153,19 +153,40 @@ the test claims to catch, and the expected test failed.
 
 ### R5 · Session membership authorization
 
-`next` · size `M` · confidence `high`
+`shipped` · size `M` · confidence `high`
 
 **Problem.** `authenticate` answers "who is this?" and nothing answers "may
 they be in *this* session?". Any authenticated participant can pass any
 `sessionId` and read the stream, the roster, and the audit ledger. In a product
 with more than one customer this is a cross-tenant read.
 
-**Done when** `multiplayerRoutes` takes an `authorize(participant, sessionId)`
-hook that is called on every route, defaults to roster membership, and returns
-403 rather than 401 when identity is known but access is not granted.
+**Shipped.** `multiplayerRoutes` takes an optional `authorize({ participant,
+sessionId, action, context })`, called on every route after `authenticate`.
+Identity failure is 401; access failure is 403 with `code: "not_a_member"`.
 
-**Notes.** `/join` is the exception and needs its own thought: the caller is by
-definition not yet on the roster, so membership cannot be the check there.
+Four decisions worth recording:
+
+- **`action` names the route** rather than lumping into read/write, so a host
+  can gate `audit` to owners without also gating `messages`.
+- **The default fails closed.** A store that throws is not a membership proof.
+  A genuine outage therefore reads as 403 rather than 500 — the right trade for
+  an authorization check, and documented as such.
+- **A custom hook replaces the default rather than layering on it.** A hook that
+  could only narrow an invisible built-in rule is harder to reason about than
+  one stating the whole policy.
+- **Unknown sessions now return 403, not 404,** because authorization runs
+  before the session is loaded. This is a deliberate behaviour change: the old
+  404 was an existence oracle. `GET /state` still 404s once authorization has
+  passed.
+
+`join` is exempt from the default rule — the caller cannot already be on a
+roster they are asking to join — but a custom hook still sees it and can reject
+it, which is where an invitation check belongs.
+
+27 tests, mutation-checked. One mutation (authorizing `vote` against a
+request-supplied session rather than the approval's own) initially escaped the
+suite; the test was strengthened to smuggle a session id the caller *is* a
+member of, and now catches it.
 
 ### R13 · Continuous integration
 

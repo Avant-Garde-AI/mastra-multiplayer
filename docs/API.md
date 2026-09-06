@@ -155,8 +155,15 @@ Event shapes: [HTTP-API](./HTTP-API.md#event-frames).
 
 ## Server
 
-`multiplayerRoutes(session, { basePath?, authenticate })` → `RouteDefinition[]`.
-See [HTTP-API](./HTTP-API.md).
+`multiplayerRoutes(session, { basePath?, authenticate, authorize? })` →
+`RouteDefinition[]`.
+
+`authenticate` establishes identity (401 on null); `authorize` establishes
+access (403 on false), defaulting to roster membership with `join` exempted.
+Also exported: `MultiplayerAction`, `AuthorizeInput`, `MultiplayerRoutesOptions`,
+`HonoLikeContext`, `RouteDefinition`.
+
+See [HTTP-API](./HTTP-API.md) and [SECURITY](./SECURITY.md#session-level-authorization).
 
 ## Client
 

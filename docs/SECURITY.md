@@ -17,7 +17,8 @@ misrepresenting who asked for something.
 **Out of scope, and yours to provide.** Authentication, transport security,
 tenant isolation, rate limiting, and abuse prevention. This package has no
 opinion about who your users are — it takes an identity from `authenticate` and
-trusts it completely.
+trusts it completely, then checks that identity against the session with
+`authorize`.
 
 ## `authenticate` is the whole perimeter
 
@@ -47,37 +48,55 @@ verified identity in your runtime context, never from a model-supplied tool
 argument — a model that can name the requester can name someone else and defeat
 `excludeRequester`.
 
-## No session-level authorization
+## Session-level authorization
 
-**This is the most important gap in `0.1.0`.**
+`authenticate` answers *who is this*. `authorize` answers *may they be here*.
+Both run on every route, in that order — 401 if identity fails, 403 if access
+does.
 
-`authenticate` answers *who is this*. Nothing answers *may they be in this
-session*. Any authenticated participant can pass any `sessionId` and read that
-session's event stream, roster, pending approvals, and audit ledger.
-
-In a single-tenant internal tool this may be acceptable. **In a product with
-more than one customer it is a cross-tenant read.**
-
-Until [R5](./ROADMAP.md#r5--session-membership-authorization)
-lands, enforce it inside your `authenticate`, which receives the request context
-and can read the path:
+**The default is roster membership**, so a participant can only reach a session
+they have joined. `join` is the one exemption, because the caller is by
+definition not yet on the roster.
 
 ```ts
-authenticate: async (c) => {
-  const user = await verifySessionCookie(c.req.header("cookie"));
-  if (!user) return null;
-
-  const sessionId = c.req.param("sessionId");
-  if (sessionId && !(await userMayAccess(user.id, sessionId))) return null;
-
-  return toParticipant(user);
-}
+multiplayerRoutes(session, {
+  authenticate,
+  authorize: async ({ participant, sessionId, action, context }) => {
+    if (action === "join") return invitedTo(participant.id, sessionId);
+    if (action === "audit") return participant.role === "owner";
+    return isMemberOf(participant.id, sessionId);
+  },
+});
 ```
 
-Two caveats. `/approvals/:approvalId/vote` has no `sessionId` in the path — look
-the approval up and check its session. And `/join` is the one route where
-membership cannot be the check, since the caller is by definition not yet on the
-roster; use your own invitation or ACL rules there.
+`action` names the route (`join`, `leave`, `stream`, `state`, `presence`,
+`messages`, `interrupt`, `approvals`, `vote`, `audit`), so a capability can be
+gated on its own rather than lumped into read/write.
+
+Three things worth knowing:
+
+- **A custom hook replaces the membership rule, it does not layer on it.** If
+  you supply `authorize`, you own the membership check too. This is deliberate —
+  a hook that could only ever narrow an invisible default rule is harder to
+  reason about than one that states the whole policy.
+- **The default fails closed.** A store that throws — unknown session, database
+  down — is not a membership proof, so it denies. The cost is that a genuine
+  outage reads as 403 rather than 500, which is the right trade for an
+  authorization check.
+- **`vote` resolves its session from the approval,** never from the request.
+  `/approvals/:approvalId/vote` carries no `sessionId`, so the approval names
+  its own before being authorized against it.
+
+**Unknown sessions return 403, not 404,** because authorization runs before the
+session is loaded. A stranger cannot use the status code to learn which session
+ids are real. A 404 only appears once authorization has passed.
+
+### What it does not cover
+
+`authorize` is a per-request check on a session id. It is not tenant isolation
+on its own — if your session ids are guessable and your `authorize` is the
+default, membership is the only thing standing between tenants. That is usually
+enough, but put your own tenant scoping in the hook if the data warrants it.
 
 ## What the package does defend
 
@@ -106,7 +125,6 @@ participant and a timestamp. The ledger is append-only through the interface.
 | | |
 | --- | --- |
 | **Policies do not survive a restart** | `ApprovalGate` holds them in a process-local `Map`. A restart mid-approval drops a four-eyes gate to the `quorum: 1` default, silently. Mitigate by keeping `expiresAfterMs` under your deploy cadence and setting `defaultApprovalPolicy` to something no weaker than your strictest gate. Fixed by [R2](./ROADMAP.md#r2--persisted-approval-policies). |
-| **No session-level authorization** | Above. [R5](./ROADMAP.md#r5--session-membership-authorization). |
 | **`interrupt()` is not role-gated** | Anyone in a session can stop its agent, including a `viewer`. Deliberate — a room can stop its own agent — but it is a denial-of-service vector in a large or semi-public session. |
 | **`preempt` mode is weaponizable** | One participant can cancel everyone else's turn by typing. Consider `queue` or `batch` for sessions with people who do not all trust each other. |
 | **No rate limiting** | Nothing bounds messages, heartbeats, or stream connections per participant. Put it in front of these routes. |

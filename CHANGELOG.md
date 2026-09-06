@@ -35,6 +35,26 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Security
+- `multiplayerRoutes` takes an optional `authorize({ participant, sessionId,
+  action, context })`, run on every route after `authenticate` (`R5`).
+  Previously `authenticate` established identity and nothing established
+  membership, so any authenticated participant could pass any `sessionId` and
+  read that session's stream, roster, approvals, and audit ledger — a
+  cross-tenant read in any multi-customer product.
+
+  Defaults to roster membership, exempting `join`. Identity failure is 401;
+  access failure is 403 with `code: "not_a_member"`. `action` names the route,
+  so capabilities can be gated individually. `vote` resolves its session from
+  the stored approval, never from the request.
+
+  **Behaviour change:** an unknown session now returns 403 rather than 404,
+  because authorization runs before the session is loaded — the old 404 was an
+  existence oracle. `GET /state` still 404s once authorization has passed.
+
+  **Breaking for custom integrations only** if you relied on any authenticated
+  identity reaching any session. That was the bug.
+
 ### Testing and CI
 - GitHub Actions runs `npm run check` and `npm run build` on Node 20 and 22 for
   every push to `main` and every pull request (`R13`).
@@ -55,7 +75,6 @@ Initial scaffold.
 ### Known gaps
 - Single-process bus and store.
 - Approval policies are not persisted across restarts.
-- `authenticate` establishes identity but not session membership.
 - No CRDT/co-editing layer.
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).
