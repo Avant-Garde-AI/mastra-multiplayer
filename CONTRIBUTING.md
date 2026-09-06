@@ -7,7 +7,12 @@ npm run build     # tsup → dist/
 ```
 
 Individually: `npm test` (vitest), `npm run typecheck` (tsc --noEmit),
-`npm run docs:check` (relative markdown links and heading anchors).
+`npm run docs:check` (relative markdown links and heading anchors). After a
+build, `node scripts/check-exports.mjs` verifies the published `exports` map —
+the tests import from `src/`, so they stay green even if the build stops
+emitting an entry point.
+
+CI runs all of it on Node 20 and 22 for every push and pull request.
 
 ## Conventions
 

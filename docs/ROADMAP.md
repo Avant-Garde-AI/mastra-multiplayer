@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0`
+Last gardened: 2026-09-06 · against `0.1.0` · Phase 0 and R4 shipped
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -32,6 +32,44 @@ The theme is **surviving a second process**. Everything in `0.1.0` assumes one
 Node process holding all state in memory. That is fine for a demo and fatal for
 a deploy, and it is the single thing most likely to make an early adopter
 abandon the package.
+
+### Sequencing
+
+The six items are not independent, and the dependencies run in one direction —
+so the order below is not a preference, it is the order that avoids rework.
+
+| Phase | Items | Theme | Ships when |
+| --- | --- | --- | --- |
+| **0 · Baseline** | R13 | Something enforces green | CI runs `check` and `build` on every push |
+| **1 · Harden the edge** | R4 → R5 | The HTTP surface stops being untested and unauthorized | Routes are covered, and a participant cannot read a session they are not in |
+| **2 · Durability** | R2 → R3 | State survives a restart | A four-eyes gate resolves correctly across a deploy, against a real database |
+| **3 · Distribution** | R1 | State survives a *second process* | Two instances share one room |
+
+Why this order and not another:
+
+- **R13 first because everything downstream assumes a green baseline** that
+  nothing currently enforces. It is an afternoon and it makes every later claim
+  checkable.
+- **R4 before R5** because R4 builds the fake-Hono-context harness, and R5
+  changes every route in the file. Writing the authorization tests without that
+  harness means building it anyway, under pressure, as part of a security
+  change. Tests first, then the change they protect.
+- **R5 before R2/R3** because it is the highest-severity gap — a cross-tenant
+  read in any multi-customer product — and it is self-contained. Nothing else
+  in the milestone depends on it, so it is the one item that could be pulled
+  forward if the calendar demands, at the cost of testing it by hand.
+- **R2 before R3** because R2 settles the shape of `ApprovalRequest` (the
+  resolved policy moves onto the record), and R3 builds a store plus a
+  conformance suite against that shape. Reversed, the conformance suite is
+  written twice.
+- **R1 last** because it is the largest, the riskiest, and the one that
+  benefits most from everything above existing. It is also the only item that
+  adds infrastructure a consumer has to run.
+
+Phases 0–2 need no new infrastructure. Phase 3 introduces Redis, which is why
+it is a boundary rather than just the next item — a deployment that stops at
+the end of Phase 2 is a coherent, shippable single-instance product with a
+tested, authorized, durable surface.
 
 ### R1 · Redis-backed `EventBus`
 
@@ -88,17 +126,30 @@ what lets someone write a Postgres store and know it is correct.
 
 ### R4 · HTTP surface tests
 
-`next` · size `M` · confidence `high`
+`shipped` · size `M` · confidence `high`
 
 **Problem.** `src/server/index.ts` and `src/client/index.ts` are 570 lines
 between them with no test coverage. They are also where authentication,
 reconnection, and event framing live — the places a regression is least likely
 to be noticed and most likely to matter.
 
-**Done when** the routes are exercised against a fake Hono context (auth
-rejection, SSE framing, replay from `Last-Event-ID`, vote error codes), and the
-client reducer is tested against synthetic event sequences including
-out-of-order and duplicate delivery.
+**Shipped.** 52 tests across `test/server.test.ts` and `test/client.test.ts`,
+on a fake Hono context and a fake `EventSource` in `test/helpers/hono.ts` — no
+server, no port, no `@mastra/core`, which is what
+[ADR 0004](./decisions/0004-structural-mastra-types.md) bought.
+
+Covered: the full route surface and base-path handling; 401 on every route when
+`authenticate` returns null; attribution taken from the authenticated identity
+rather than the request body; the state snapshot and its sequence consistency;
+SSE headers, framing, replay from both `Last-Event-ID` and `?lastSeq=`, and
+which wins; subscribe/unsubscribe lifecycle; presence cleared on cancel without
+a roster eviction; vote error codes; audit limits. On the client: the
+join → hydrate → connect ordering, cursor handling while a stream is open, every
+reducer branch, duplicate and malformed frames, reconnect backoff, and heartbeat
+lifecycle.
+
+Each behavioural test was mutation-checked — the source was broken in the way
+the test claims to catch, and the expected test failed.
 
 ### R5 · Session membership authorization
 
@@ -118,14 +169,21 @@ definition not yet on the roster, so membership cannot be the check there.
 
 ### R13 · Continuous integration
 
-`next` · size `S` · confidence `high`
+`shipped` · size `S` · confidence `high`
 
 **Problem.** There is no `.github/workflows`, so `build`, `typecheck`, `test`,
 and `docs:check` run only when someone remembers. Every other item on this list
 assumes a green baseline that nothing currently enforces.
 
-**Done when** a workflow runs `npm run check` and `npm run build` on push and
-pull request, on the Node versions `engines` claims to support.
+**Shipped.** `.github/workflows/ci.yml` runs `npm run check` and `npm run build`
+on push to `main` and on every pull request, across Node 20 and 22 — the
+boundary `engines` claims and current LTS, so the claim is enforced rather than
+asserted. Concurrency-grouped so a newer push cancels the older run.
+
+Also added `scripts/check-exports.mjs`, run after the build: the test suite
+imports from `src/`, so it stays green even if the build stops emitting an entry
+point. A broken `exports` map is otherwise invisible until someone installs the
+package.
 
 **Notes.** Cheapest item here and the one that makes the rest trustworthy.
 Deliberately left out of the launch-review pass because CI configuration is a

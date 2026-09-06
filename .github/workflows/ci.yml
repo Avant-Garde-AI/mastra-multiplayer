@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `engines` claims >=20. Test the boundary and current LTS, so the
+        # claim is enforced rather than asserted.
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # typecheck + tests + doc links, the same command contributors run.
+      - run: npm run check
+
+      - run: npm run build
+
+      # The published surface is dist/. A build that emits no types breaks
+      # every consumer while every test still passes.
+      - name: Verify the published entry points exist
+        run: node scripts/check-exports.mjs
