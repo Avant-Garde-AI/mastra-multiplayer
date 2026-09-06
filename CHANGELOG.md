@@ -35,6 +35,18 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Storage
+- `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) — a durable
+  store on LibSQL/SQLite/Turso (`R3`). `@libsql/client` is an optional peer
+  dependency imported by that subpath alone; the core stays dependency-free.
+- A conformance suite (`mastra-multiplayer/storage/conformance`) — 38
+  framework-agnostic checks any `MultiplayerStore` implementation can run, with
+  no test-framework dependency.
+- **Contract clarified:** reads against an unknown session return empty or null,
+  writes reject, deletes are idempotent. `InMemoryMultiplayerStore` previously
+  threw on reads of an unknown session and now returns empty. Found by running
+  the conformance suite against it.
+
 ### Approvals
 - **Approval policies are persisted on the request** (`R2`).
   `ApprovalRequest.policy` carries the resolved policy — every defaultable

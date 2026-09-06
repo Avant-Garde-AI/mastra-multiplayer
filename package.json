@@ -54,6 +54,14 @@
       "types": "./dist/storage/index.d.ts",
       "import": "./dist/storage/index.js"
     },
+    "./storage/conformance": {
+      "types": "./dist/storage/conformance.d.ts",
+      "import": "./dist/storage/conformance.js"
+    },
+    "./storage/libsql": {
+      "types": "./dist/storage/libsql.d.ts",
+      "import": "./dist/storage/libsql.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -68,7 +76,8 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0",
-    "react": ">=18"
+    "react": ">=18",
+    "@libsql/client": ">=0.14"
   },
   "peerDependenciesMeta": {
     "@mastra/core": {
@@ -76,9 +85,13 @@
     },
     "react": {
       "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@libsql/client": "^0.18.0",
     "@types/node": "^22.20.1",
     "@types/react": "^18.3.31",
     "tsup": "^8.3.0",

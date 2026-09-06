@@ -16,9 +16,15 @@ CI runs all of it on Node 20 and 22 for every push and pull request.
 
 ## Conventions
 
-- Everything in `src/` is dependency-free except for `node:crypto`. Mastra and
-  React are peer dependencies and must stay optional — the core primitives are
-  testable without either installed.
+- Everything in `src/` is dependency-free except for `node:crypto`. Mastra,
+  React, and `@libsql/client` are peer dependencies and must stay optional — the
+  core primitives are testable without any of them installed. A driver import
+  belongs in its own subpath module, never on a path the root entry point
+  reaches.
+- A change to `MultiplayerStore` semantics belongs in
+  `src/storage/conformance.ts`, not only in a test file. That suite is what a
+  third-party implementation is checked against; a contract that lives only in
+  our tests is a contract nobody else can meet.
 - Mastra types are declared structurally (`AgentLike`, `HonoLikeContext`)
   rather than imported, so the package compiles standalone. When Mastra's shape
   changes, widen these rather than importing.

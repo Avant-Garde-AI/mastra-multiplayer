@@ -97,21 +97,24 @@ export class InMemoryMultiplayerStore implements MultiplayerStore {
     sessionId: SessionId,
     participantId: ParticipantId,
   ): Promise<void> {
-    const bucket = this.requireBucket(sessionId);
-    bucket.participants.delete(participantId);
-    bucket.presence.delete(participantId);
+    // Deletes are idempotent: removing from a session that is already gone is
+    // the state the caller wanted.
+    const bucket = this.readBucket(sessionId);
+    bucket?.participants.delete(participantId);
+    bucket?.presence.delete(participantId);
   }
 
   async getParticipant(
     sessionId: SessionId,
     participantId: ParticipantId,
   ): Promise<Participant | null> {
-    const found = this.requireBucket(sessionId).participants.get(participantId);
+    const found = this.readBucket(sessionId)?.participants.get(participantId);
     return found ? { ...found } : null;
   }
 
   async listParticipants(sessionId: SessionId): Promise<Participant[]> {
-    return [...this.requireBucket(sessionId).participants.values()].map((p) => ({ ...p }));
+    const bucket = this.readBucket(sessionId);
+    return bucket ? [...bucket.participants.values()].map((p) => ({ ...p })) : [];
   }
 
   async setPresence(sessionId: SessionId, presence: PresenceState): Promise<void> {
@@ -119,11 +122,12 @@ export class InMemoryMultiplayerStore implements MultiplayerStore {
   }
 
   async listPresence(sessionId: SessionId): Promise<PresenceState[]> {
-    return [...this.requireBucket(sessionId).presence.values()].map((p) => ({ ...p }));
+    const bucket = this.readBucket(sessionId);
+    return bucket ? [...bucket.presence.values()].map((p) => ({ ...p })) : [];
   }
 
   async clearPresence(sessionId: SessionId, participantId: ParticipantId): Promise<void> {
-    this.requireBucket(sessionId).presence.delete(participantId);
+    this.readBucket(sessionId)?.presence.delete(participantId);
   }
 
   async saveApproval(request: ApprovalRequest): Promise<void> {
@@ -149,13 +153,30 @@ export class InMemoryMultiplayerStore implements MultiplayerStore {
   }
 
   async listAudit(sessionId: SessionId, limit = 100): Promise<AuditEntry[]> {
-    const audit = this.requireBucket(sessionId).audit;
+    const audit = this.readBucket(sessionId)?.audit ?? [];
     return audit.slice(-limit).map((e) => ({ ...e }));
   }
 
+  /**
+   * For writes: a mutation against a session that does not exist is a bug in
+   * the caller, and surfacing it beats silently creating a session or dropping
+   * the write.
+   */
   private requireBucket(sessionId: SessionId): SessionBucket {
     const bucket = this.sessions.get(sessionId);
     if (!bucket) throw new Error(`Unknown session: ${sessionId}`);
     return bucket;
+  }
+
+  /**
+   * For reads: an unknown session is empty, not an error.
+   *
+   * Reads run on paths that legitimately ask about session ids that may not
+   * exist — the default authorization rule calls `getParticipant` for whatever
+   * id the request named. Making those throw would turn "not a member" into an
+   * exception every caller has to catch.
+   */
+  private readBucket(sessionId: SessionId): SessionBucket | undefined {
+    return this.sessions.get(sessionId);
   }
 }

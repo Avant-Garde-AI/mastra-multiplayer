@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · Phases 0–1 shipped, Phase 2 in progress
+Last gardened: 2026-09-06 · against `0.1.0` · Phases 0–2 shipped
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -128,18 +128,47 @@ stored policy fails eight tests.
 
 ### R3 · Store-backed `MultiplayerStore` reference implementation
 
-`next` · size `L` · confidence `high`
+`shipped` · size `L` · confidence `high`
 
 **Problem.** `InMemoryMultiplayerStore` is the only implementation that ships.
 Everyone who adopts the package has to write the persistence layer before they
 can deploy, from an interface with no reference to check their work against.
 
-**Done when** there is one durable implementation (LibSQL/SQLite first, since
-Mastra already leans on it), a shared conformance test suite that any
-implementation can run, and `docs/STORAGE.md` points at both.
+**Shipped.** `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) and
+a 38-check conformance suite (`mastra-multiplayer/storage/conformance`).
 
-**Notes.** The conformance suite matters more than the implementation. It is
-what lets someone write a Postgres store and know it is correct.
+`@libsql/client` is an optional peer dependency imported by that subpath alone,
+so installing this package still pulls in no database driver. The client is
+passed in, not constructed — connection lifetime and auth stay the host's.
+
+The suite is **framework-agnostic data**, not a test file: `conformanceChecks()`
+returns `{ group, name, run(store) }` objects that vitest, jest, `node:test`, or
+a bare script can drive. That was the right call — it is the artifact a
+third-party Postgres store needs, and shipping it as a vitest suite would have
+forced vitest on them.
+
+It earned its place immediately. Run against the existing in-memory store, it
+failed three checks and forced a contract decision the interface had never
+made: **reads of an unknown session return empty, writes reject, deletes are
+idempotent.** `InMemoryMultiplayerStore` used to throw on reads; it now matches.
+That question would otherwise have been answered differently by every
+implementation.
+
+Mutation-checked against the LibSQL store with the five mistakes a real
+implementer makes — a naive `ORDER BY at ASC LIMIT n`, an `updateSession` that
+skips `undefined`, a plain `INSERT` instead of an upsert, a `removeParticipant`
+that leaves presence behind, an approval storing only its policy's name. Each
+was caught by the check written for it.
+
+Five further integration tests run the whole package against a real database,
+including a four-eyes gate resolving across a restart and a store reopened
+against the same file — an in-memory database would have passed every other
+test here.
+
+**Not covered, and documented as such:** concurrent votes. The suite is
+single-threaded by construction and cannot check that two simultaneous votes on
+a `quorumOf(2)` gate resolve it exactly once, which is the most important thing
+to get right in a real store.
 
 ### R4 · HTTP surface tests
 
