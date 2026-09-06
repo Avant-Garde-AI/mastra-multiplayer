@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · the `0.2.0` milestone is complete
+Last gardened: 2026-09-06 · against `0.1.0` · `0.2.0` complete, Phase 4 in progress
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -26,7 +26,7 @@ splitting before anyone starts.
 opposed to how sure we are it can be built. Low-confidence items should not be
 scheduled.
 
-## Now — the `0.2.0` milestone
+## Shipped — the `0.2.0` milestone
 
 **Complete.** All six items shipped.
 
@@ -301,28 +301,78 @@ package.
 Deliberately left out of the launch-review pass because CI configuration is a
 choice about the project's infrastructure rather than a cleanup.
 
-## Next — after `0.2.0`
+## Now — Phase 4 · Operability (`0.3.0`)
 
-### R14 · Distributed turn-taking
+The `0.2.0` theme was *surviving a second process*. This one is **behaving
+correctly once you are running more than one, and running unattended** — the
+things that only show up after deployment.
 
-`later` · size `L` · confidence `medium`
+| Item | Status |
+| --- | --- |
+| R14 · Cross-instance turn coordination | `shipped` |
+| R10 · Structured errors and a logger seam | `shipped` |
+| R9 · Backpressure on the SSE stream | `next` |
+| R8 · Durable expiry | `next` |
 
-`RedisEventBus` shares events between instances; it does not share turn-taking.
-Every instance sees every message and each decides independently whether to run
-the agent, so two instances answer the same message twice — visibly, in the
-transcript.
+R14 came first because it is a correctness gap left open by R1, and because
+finding out what was actually broken changed the design. R10 came with it
+because the lease's retry path needed somewhere to report to.
 
-Session affinity at the load balancer avoids it and is what the docs currently
-recommend. That is a real answer, not a placeholder: it costs nothing and fails
-only when an instance dies mid-session.
+### R14 · Cross-instance turn coordination
 
-A proper fix needs a lease — a short-lived Redis lock per session that one
-instance holds while running a turn, renewed while streaming and released at the
-end, with a timeout so a crashed holder does not wedge the room. The reason
-confidence is only medium is that a lease introduces its own failure mode: a
-holder that stalls without dying leaves the session mute until the lease
-expires, which may be worse than a duplicate reply. Worth measuring against real
-usage before building.
+`shipped` · size `L` · confidence `high`
+
+**The problem was not what this entry originally said.** It claimed every
+instance runs every message, so two would answer the same message twice. That is
+wrong: `turns.submit()` is called only by the instance that received the HTTP
+request. Two live instances were run to find out what actually breaks:
+
+- **Two concurrent runs for one session.** People posting to different
+  instances at the same moment each start a turn, interleaving deltas under two
+  `runId`s. The documented "one run at a time per session" held per process.
+- **`interrupt()` aborted only locally** while still publishing
+  `agent.run.interrupted` — so every client showed the run stopped and the agent
+  kept streaming. Worse than a no-op: the UI lied.
+
+**Shipped.** Two fixes, deliberately separable:
+
+- A `TurnLease` (`acquire` / `renew` / `release`) that `TurnController` takes
+  before running, renews while streaming, and releases at the end.
+  `RedisTurnLease` uses `SET NX PX` and ownership-checked Lua for renew and
+  release. Optional — a single-instance deployment should not pay for it.
+- Distributed interrupt, **on by default and needing no lease**: a run in flight
+  subscribes for `agent.run.interrupted` for its duration, so an interrupt
+  raised anywhere stops the run wherever it is happening.
+
+Confidence moved from medium to high once the failure mode was measured rather
+than guessed at. The stall concern was real but narrower than feared: renewal
+during streaming covers long runs, and the residual case — a lost lease aborting
+a legitimate reply — is documented rather than hidden.
+
+Mutation-checked. An `acquire` whose result is ignored, a lease taken without an
+expiry, a lease never released, and a run that stops listening for remote
+interrupts each fail the tests written for them. One mutation escaped at first —
+a `release` that skips its ownership check, which lets a stale holder free a
+lease another instance is actively using. That is the concurrent-run bug
+reintroduced through the cleanup path, so it now has its own contract tests, run
+against both lease implementations.
+
+### R10 · Structured errors and a logger seam
+
+`shipped` · size `S` · confidence `high`
+
+**Shipped.** A four-method `Logger` (`debug` / `info` / `warn` / `error`), each
+taking a message and a context object. `consoleLogger` is the default,
+`silentLogger` discards. Set it once on `createMultiplayer({ logger })` and the
+bus, presence manager, approval gate, and turn controller all use it. No new
+dependency.
+
+Every `console.error` in `src/` is gone. A host-supplied logger that throws
+cannot break the caller — publishing an event should not fail because shipping a
+log line did, and there is nothing useful to do about a logging failure except
+carry on.
+
+## Next — after Phase 4
 
 ### R6 · Workflow step factory for gates
 
@@ -369,14 +419,6 @@ documentation saying so, rather than a timer this package owns.
 a busy session grows the stream's internal queue without bound. Needs a
 `desiredSize` check and a policy for what to drop — almost certainly
 `agent.delta`, since the terminal `message` event carries the full text anyway.
-
-### R10 · Structured errors and a logger seam
-
-`later` · size `S` · confidence `high`
-
-Three `console.error` calls are the entire error-reporting story. Hosts need to
-route these into their own logging. A minimal `logger` option on
-`MultiplayerOptions` with a console default, and no new dependency.
 
 ## Researching
 

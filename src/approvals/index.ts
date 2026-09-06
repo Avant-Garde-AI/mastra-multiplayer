@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type { MultiplayerBus } from "../bus/bus.js";
 import type { MultiplayerStore } from "../storage/index.js";
+import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -74,7 +75,12 @@ export class ApprovalGate {
     private readonly store: MultiplayerStore,
     private readonly bus: MultiplayerBus,
     private readonly defaultPolicy: ApprovalPolicy = { name: "default" },
-  ) {}
+    logger: Logger = consoleLogger,
+  ) {
+    this.logger = safeLogger(logger);
+  }
+
+  private readonly logger: Logger;
 
   async request(input: RequestApprovalInput): Promise<ApprovalRequest> {
     // Resolved once, here, and stored. The governance decision a requester saw
@@ -236,10 +242,10 @@ export class ApprovalGate {
    */
   private policyFor(request: ApprovalRequest): ResolvedPolicy {
     if (request.policy) return request.policy;
-    console.error(
-      `[mastra-multiplayer] approval ${request.id} has no stored policy; ` +
-        `falling back to "${this.defaultPolicy.name}". It was created by an ` +
-        `older version and its original policy is unrecoverable.`,
+    this.logger.error(
+      "approval has no stored policy; falling back to the default. It was " +
+        "created by an older version and its original policy is unrecoverable.",
+      { approvalId: request.id, fallbackPolicy: this.defaultPolicy.name },
     );
     return mergePolicy(this.defaultPolicy);
   }

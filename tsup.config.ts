@@ -10,6 +10,7 @@ export default defineConfig({
     "src/storage/conformance.ts",
     "src/storage/libsql.ts",
     "src/bus/redis.ts",
+    "src/concurrency/redis-lease.ts",
   ],
   format: ["esm"],
   dts: true,

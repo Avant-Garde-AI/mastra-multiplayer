@@ -84,16 +84,70 @@ room can always stop its own agent, but note it is not role-gated.
 
 - **Nothing survives a process restart.** The queue and pending windows are in
   memory. A restart mid-turn loses the queue silently.
-- **Nothing coordinates across processes.** Two instances will each run a turn
-  for the same session. `RedisEventBus` shares *events* between processes, not
-  turn-taking — every instance sees every message, and each decides
-  independently whether to run the agent. Session affinity at the load balancer
-  is the answer today; a distributed `TurnController` is not built.
+- **Turn-taking is per-process unless you give it a lease.** Without one, two
+  people posting to *different* instances at the same moment start two
+  concurrent runs into one session. See below.
 - **Messages are published to the room before the mode is applied.** Everyone
   sees every message in the transcript even when the agent skips or debounces
   it away. This is intentional — humans should see what other humans said —
   but it means "in the transcript" and "the agent read it" are different things,
   and a UI that implies otherwise will mislead people.
+
+## Running on more than one instance
+
+`TurnController` enforces "one run at a time per session" with an in-memory
+flag — correct in one process, and silently wrong in two. A `TurnLease` makes
+it true across processes:
+
+```ts
+import { RedisTurnLease } from "mastra-multiplayer/concurrency/redis-lease";
+
+createMultiplayer({
+  agent,
+  bus,
+  concurrency: {
+    mode: "queue",
+    lease: new RedisTurnLease(new Redis(url)),
+    leaseTtlMs: 30_000,   // default
+    leaseRetryMs: 250,    // default
+  },
+});
+```
+
+An instance takes the lease before running, renews it while streaming, and
+releases it at the end. An instance that cannot take it **waits and retries**
+rather than dropping the message — the reply is still owed once the other
+instance finishes.
+
+What this is not: a message is submitted to `TurnController` only by the
+instance that received the HTTP request, so nobody was ever answering the same
+message twice. The bug is *concurrent* turns, not duplicated ones.
+
+### Two things the lease costs you
+
+- **A lost lease aborts the run.** If renewal fails — a Redis blip, or a stall
+  past the TTL — the run is aborted, because another instance may already have
+  taken over and continuing would produce exactly the interleaved output the
+  lease prevents. The cost is real: a network hiccup cuts a legitimate reply
+  short. Raise `leaseTtlMs` if your agent runs long and your Redis is flaky.
+- **A lease backend that is down stops turns entirely.** `acquire` failing is
+  treated as "not acquired", logged, and retried. Degrading to "run anyway"
+  would silently reintroduce the bug the lease exists to prevent, so it does
+  not.
+
+Without a lease, session affinity at the load balancer gets you the same
+guarantee for free, and fails only when an instance dies mid-session. That is a
+legitimate choice, not a workaround.
+
+### Interrupts cross instances
+
+`interrupt()` aborts locally and publishes `agent.run.interrupted`. A run in
+flight listens for that event for its duration, so an interrupt raised on any
+instance stops the run wherever it is actually happening.
+
+This needs no lease and is on by default. Before it, hitting the wrong instance
+published the event and aborted nothing — every client showed the run stopped
+while the agent kept streaming.
 
 ## Not addressed to the agent
 

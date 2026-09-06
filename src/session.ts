@@ -7,6 +7,7 @@ import type { MultiplayerBus } from "./bus/bus.js";
 import { TurnController, type Turn, type TurnControllerOptions } from "./concurrency/index.js";
 import { PresenceManager, type PresenceOptions } from "./presence/index.js";
 import { InMemoryMultiplayerStore, type MultiplayerStore } from "./storage/index.js";
+import { consoleLogger, safeLogger, type Logger } from "./internal/logger.js";
 import type {
   AuditAction,
   InboundMessage,
@@ -45,6 +46,11 @@ export interface MultiplayerOptions {
   /** Policy applied when a tool requests approval without naming one. */
   defaultApprovalPolicy?: ApprovalPolicy;
   /**
+   * Where this package reports failures. Set once here and every piece it
+   * constructs uses it. Defaults to `console`.
+   */
+  logger?: Logger;
+  /**
    * Called to build the per-turn options passed to `agent.stream`. Use it to
    * set memory scoping, runtime context, or tool overrides.
    */
@@ -79,18 +85,28 @@ export class MultiplayerSession {
   constructor(options: MultiplayerOptions) {
     this.agent = options.agent;
     this.agentId = options.agentId ?? options.agent.id ?? options.agent.name ?? "agent";
+    // Built once and handed to every piece, so a host configures logging in
+    // one place rather than per component.
+    const logger = safeLogger(options.logger ?? consoleLogger);
     this.store = options.store ?? new InMemoryMultiplayerStore();
     this.bus =
       options.bus && "publish" in options.bus
         ? options.bus
-        : new EventBus(options.bus);
-    this.presence = new PresenceManager(this.store, this.bus, options.presence);
+        : new EventBus({ ...options.bus, logger });
+    this.presence = new PresenceManager(this.store, this.bus, {
+      ...options.presence,
+      logger,
+    });
     this.approvals = new ApprovalGate(
       this.store,
       this.bus,
       options.defaultApprovalPolicy,
+      logger,
     );
-    this.turns = new TurnController((turn) => this.runTurn(turn), options.concurrency);
+    this.turns = new TurnController((turn) => this.runTurn(turn), {
+      ...options.concurrency,
+      logger: options.concurrency?.logger ?? logger,
+    });
     this.buildStreamOptions = options.buildStreamOptions;
   }
 
@@ -167,7 +183,14 @@ export class MultiplayerSession {
     await this.turns.submit(message);
   }
 
-  /** Stops the in-flight run. Anyone in the session may do this. */
+  /**
+   * Stops the in-flight run. Anyone in the session may do this.
+   *
+   * Aborts locally first, then publishes — so the instance actually running the
+   * turn stops even when the request landed somewhere else. The publishing
+   * instance receives its own event too; interrupting an already-stopped run is
+   * a no-op.
+   */
   async interrupt(sessionId: SessionId, participantId: ParticipantId): Promise<void> {
     this.turns.interrupt(sessionId);
     const session = await this.store.getSession(sessionId);
@@ -205,6 +228,15 @@ export class MultiplayerSession {
       ...(signal ? { signal } : {}),
     };
 
+    // An interrupt raised on another instance arrives as an event, not a local
+    // call — so listen for one while the run is in flight. Without this,
+    // `interrupt()` on the wrong instance publishes `agent.run.interrupted`
+    // and aborts nothing, and every client shows the run as stopped while the
+    // agent keeps streaming.
+    const stopListening = this.bus.subscribe(turn.sessionId, (event) => {
+      if (event.type === "agent.run.interrupted") this.turns.interrupt(turn.sessionId);
+    });
+
     const prompt = labelBatch(turn.messages, participants);
     const streamOptions: Record<string, unknown> = {
       memory: { thread: session.threadId, resource: session.id },
@@ -230,6 +262,7 @@ export class MultiplayerSession {
         });
       }
     } finally {
+      stopListening();
       await this.store.updateSession(turn.sessionId, { runningRunId: undefined });
     }
 

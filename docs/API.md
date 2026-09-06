@@ -13,6 +13,7 @@ Every exported symbol, by entry point. Types are in
 | `mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
 | `mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
 | `mastra-multiplayer/bus/redis` | `RedisEventBus` |
+| `mastra-multiplayer/concurrency/redis-lease` | `RedisTurnLease` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
 `src/` imports either — Mastra and Hono types are declared structurally
@@ -30,6 +31,7 @@ interface MultiplayerOptions {
   presence?: PresenceOptions;
   concurrency?: TurnControllerOptions;
   defaultApprovalPolicy?: ApprovalPolicy;
+  logger?: Logger;         // set once; every piece it builds uses it
   // `bus` takes either options for the in-process bus, or a bus instance.
   buildStreamOptions?: (context: TurnContext) => Record<string, unknown>;
 }
@@ -107,8 +109,17 @@ interface TurnControllerOptions {
   mode?: ConcurrencyMode;  // "queue" | "debounce" | "batch" | "skip" | "preempt"
   windowMs?: number;       // default 1500
   maxBatchSize?: number;   // default 10
+  lease?: TurnLease;       // makes one-run-at-a-time hold across processes
+  leaseTtlMs?: number;     // default 30_000
+  leaseRenewMs?: number;   // default ttl / 3
+  leaseRetryMs?: number;   // default 250
+  logger?: Logger;
 }
 ```
+
+`TurnLease` — `acquire`, `renew`, `release`, all keyed by `(sessionId, holder)`.
+`InMemoryTurnLease` ships for tests; `RedisTurnLease` for deployment. `renew`
+returning **false means the lease was lost**, which aborts the run.
 
 Mode selection matters more than the API: [CONCURRENCY](./CONCURRENCY.md).
 
@@ -251,6 +262,17 @@ the client state plus `send`, `setTyping`, `interrupt`, `vote`, and `client`.
 It calls `start()` on mount and `disconnect()` on unmount. The client is created
 once from the options given on first render — **changing `sessionId` later does
 not reconnect it.** Remount with a `key` when the session changes.
+
+## Logging
+
+`Logger` is a four-method interface (`debug`, `info`, `warn`, `error`), each
+taking a message and an optional context object. `consoleLogger` is the default;
+`silentLogger` discards everything.
+
+Set it once on `createMultiplayer({ logger })` and the bus, presence manager,
+approval gate, and turn controller all use it. A logger that throws cannot break
+the caller — publishing an event should not fail because shipping a log line
+did.
 
 ## Storage
 

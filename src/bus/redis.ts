@@ -32,6 +32,7 @@
 import type { SessionId } from "../types.js";
 import type { MultiplayerBus, PublishInput } from "./bus.js";
 import type { EventHandler, MultiplayerEvent } from "./events.js";
+import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 
 /** The command surface used here. Satisfied by `ioredis`. */
 export interface RedisLikeClient {
@@ -69,7 +70,9 @@ export interface RedisEventBusOptions {
   keyPrefix?: string;
   /** Events retained per session for reconnect replay. Default 200, 0 disables. */
   replayBufferSize?: number;
-  /** Called when a payload cannot be parsed. Defaults to `console.error`. */
+  /** Where to report a failure. Defaults to `console`. */
+  logger?: Logger;
+  /** Overrides `logger` for errors, if a callback suits you better. */
   onError?: (error: unknown, context: string) => void;
 }
 
@@ -131,10 +134,9 @@ export class RedisEventBus implements MultiplayerBus {
     this.subscriber = options.subscriber;
     this.prefix = options.keyPrefix ?? "mp";
     this.replayBufferSize = options.replayBufferSize ?? 200;
+    const logger = safeLogger(options.logger ?? consoleLogger);
     this.onError =
-      options.onError ??
-      ((error, context) =>
-        console.error(`[mastra-multiplayer] ${context}`, error));
+      options.onError ?? ((error, context) => logger.error(context, { error }));
   }
 
   async publish(input: PublishInput): Promise<MultiplayerEvent> {
