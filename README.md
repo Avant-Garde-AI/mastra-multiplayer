@@ -201,7 +201,7 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 ## Known limitations
 
-- **Turn-taking is per-process.** `RedisEventBus` and `LibSQLMultiplayerStore` make events and storage shared, but `TurnController` is not distributed: two instances will each run a turn for the same session. Use session affinity at the load balancer.
+- **Turn-taking is per-process.** `RedisEventBus` and `LibSQLMultiplayerStore` make events and storage shared, but `TurnController` is not. Two people posting to different instances at the same moment start two concurrent agent runs into one session, and `interrupt()` only aborts a run in the process that receives it. Use session affinity at the load balancer.
 - **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
 - **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.

@@ -1,6 +1,7 @@
 import type { SessionId } from "../types.js";
 import type { EventHandler, MultiplayerEvent } from "./events.js";
 import type { MultiplayerBus, PublishInput } from "./bus.js";
+import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 
 export interface EventBusOptions {
   /**
@@ -8,6 +9,8 @@ export interface EventBusOptions {
    * Default 200. Set to 0 to disable replay.
    */
   replayBufferSize?: number;
+  /** Where to report a subscriber that throws. Defaults to `console`. */
+  logger?: Logger;
 }
 
 /**
@@ -23,9 +26,11 @@ export class EventBus implements MultiplayerBus {
   private buffers = new Map<SessionId, MultiplayerEvent[]>();
   private sequences = new Map<SessionId, number>();
   private readonly replayBufferSize: number;
+  private readonly logger: Logger;
 
   constructor(options: EventBusOptions = {}) {
     this.replayBufferSize = options.replayBufferSize ?? 200;
+    this.logger = safeLogger(options.logger ?? consoleLogger);
   }
 
   /**
@@ -51,7 +56,7 @@ export class EventBus implements MultiplayerBus {
           handler(event);
         } catch (error) {
           // One bad subscriber must not stop delivery to the others.
-          console.error("[mastra-multiplayer] subscriber threw", error);
+          this.logger.error("subscriber threw", { sessionId: event.sessionId, error });
         }
       }
     }

@@ -155,6 +155,22 @@ client tracking its highest sequence will discard as stale. Both lose data
 quietly, so the bus owns the transition rather than documenting an ordering rule
 for callers to get wrong.
 
-**`TurnController` is still per-process.** Two instances will each run a turn
-for the same session. Session affinity at the load balancer is the interim
-answer; see [ROADMAP](./ROADMAP.md).
+## What multiple instances still get wrong
+
+`TurnController` is per-process, and that breaks two documented guarantees.
+Both were confirmed against two live instances rather than reasoned about:
+
+- **"One run at a time per session" holds per process, not per session.** Two
+  people posting to different instances at the same moment start two agent runs
+  into one session, interleaving deltas from two different `runId`s.
+- **`interrupt()` only aborts a run in the process that receives it.** Hit the
+  wrong instance and the abort silently does nothing — but
+  `agent.run.interrupted` is still published, so every client shows the run as
+  stopped while the agent keeps streaming. That is worse than a no-op: the UI
+  lies.
+
+`queueDepth` is likewise local, so the `skip`-mode signal undercounts.
+
+Note what is *not* broken: a message is submitted to `TurnController` only by
+the instance that received the HTTP request, so two instances never answer the
+same message twice. See [ROADMAP](./ROADMAP.md).

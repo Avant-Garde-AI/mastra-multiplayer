@@ -145,6 +145,16 @@ The README described behaviour the code does not have. Corrected in this pass:
   The README and [CONCEPTS](../CONCEPTS.md) now say what the code does and flag
   the gap.
 
+## Corrected later
+
+While building `R1`, this review's framing of the multi-instance problem was
+repeated in several places as "two instances each run a turn for the same
+message". That is wrong — `turns.submit()` is called only by the instance that
+received the HTTP request. Measuring two live instances showed the real defects:
+two *concurrent* runs for one session, and an `interrupt()` that aborted only
+locally while still telling every client the run had stopped. Both are fixed in
+`R14`; the docs were corrected at the same time.
+
 ## Not findings
 
 Noted so the next reviewer does not re-derive them:

@@ -1,5 +1,6 @@
 import { unrefTimer } from "../internal/timers.js";
 import type { MultiplayerBus } from "../bus/bus.js";
+import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 import type { MultiplayerStore } from "../storage/index.js";
 import type {
   ParticipantId,
@@ -17,6 +18,7 @@ export interface PresenceOptions {
   sweepIntervalMs?: number;
   /** Injected for tests. */
   now?: () => number;
+  logger?: Logger;
 }
 
 /**
@@ -32,6 +34,7 @@ export class PresenceManager {
   private readonly dropAfterMs: number;
   private readonly sweepIntervalMs: number;
   private readonly now: () => number;
+  private readonly logger: Logger;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -43,6 +46,7 @@ export class PresenceManager {
     this.dropAfterMs = options.dropAfterMs ?? 90_000;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 10_000;
     this.now = options.now ?? (() => Date.now());
+    this.logger = safeLogger(options.logger ?? consoleLogger);
   }
 
   /** Records a heartbeat and broadcasts the new roster. */
@@ -136,7 +140,10 @@ export class PresenceManager {
         const sessions = await this.store.listSessions();
         for (const session of sessions) {
           await this.sweep(session.id).catch((error) => {
-            console.error("[mastra-multiplayer] presence sweep failed", error);
+            this.logger.error("presence sweep failed", {
+              sessionId: session.id,
+              error,
+            });
           });
         }
       })();

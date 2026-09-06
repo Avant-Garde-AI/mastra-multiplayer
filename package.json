@@ -66,6 +66,10 @@
       "types": "./dist/bus/redis.d.ts",
       "import": "./dist/bus/redis.js"
     },
+    "./concurrency/redis-lease": {
+      "types": "./dist/concurrency/redis-lease.d.ts",
+      "import": "./dist/concurrency/redis-lease.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

@@ -35,6 +35,28 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Concurrency
+- **`interrupt()` now stops a run owned by another instance** (`R14`). It
+  aborted only locally while still publishing `agent.run.interrupted`, so every
+  client showed the run stopped while the agent kept streaming. A run in flight
+  now listens for that event for its duration. On by default, no lease needed.
+- `TurnLease` makes "one run at a time per session" hold across processes.
+  `RedisTurnLease` (`mastra-multiplayer/concurrency/redis-lease`) uses
+  `SET NX PX` with ownership-checked renew and release; `InMemoryTurnLease`
+  ships for tests. Optional via `concurrency: { lease }` — without it, two
+  people posting to different instances at the same moment start two concurrent
+  runs into one session.
+
+  A lost lease aborts the run rather than continuing, and a lease backend that
+  is unreachable stops turns rather than degrading to "run anyway". Both are
+  documented in `docs/CONCURRENCY.md`.
+
+### Logging
+- A `Logger` seam (`R10`): `createMultiplayer({ logger })` is threaded to the
+  bus, presence manager, approval gate, and turn controller. `consoleLogger` is
+  the default, `silentLogger` discards. Every `console.error` in `src/` is gone,
+  and a host logger that throws cannot break the caller.
+
 ### Event bus
 - `RedisEventBus` (`mastra-multiplayer/bus/redis`) — a shared bus for
   deployments running more than one process (`R1`). `ioredis` is an optional
@@ -126,8 +148,8 @@ Initial scaffold.
 - Removed `.npmignore`, which npm ignores when `files` is present.
 
 ### Known gaps
-- `TurnController` is not distributed: two instances each run a turn for the
-  same session. Use session affinity at the load balancer.
+- Turn-taking is per-process unless you configure a `TurnLease`. Without one,
+  concurrent posts to different instances start two runs into one session.
 - No CRDT/co-editing layer.
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).
