@@ -18,7 +18,7 @@ const request = (overrides: Partial<ApprovalRequest> = {}): ApprovalRequest => (
   toolArgs: { amountCents: 4000 },
   bindingHash: "hash",
   summary: "Refund $40",
-  policyName: "sparse",
+  policy: mergePolicy({ name: "sparse" }),
   status: "pending",
   votes: [],
   createdAt: 0,

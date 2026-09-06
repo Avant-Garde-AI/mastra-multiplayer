@@ -1,34 +1,15 @@
 import type {
+  ApprovalPolicy,
   ApprovalRequest,
   ApprovalStatus,
   Participant,
-  ParticipantId,
-  ParticipantRole,
+  ResolvedPolicy,
 } from "../types.js";
 
-export interface ApprovalPolicy {
-  name: string;
-  /** How many approve votes are needed. Default 1. */
-  quorum?: number;
-  /**
-   * When true, the participant who requested the action cannot approve it.
-   * This is the four-eyes / maker-checker rule.
-   */
-  excludeRequester?: boolean;
-  /** Only these roles may vote. Default: owner, editor, approver. */
-  allowedRoles?: ParticipantRole[];
-  /** Explicit allowlist of participant ids, checked in addition to roles. */
-  allowedParticipants?: ParticipantId[];
-  /** A single deny resolves the request. Default true. */
-  denyIsFinal?: boolean;
-  /** How long the request stays open. Default 15 minutes. */
-  expiresAfterMs?: number;
-  /**
-   * What happens when the request expires with no resolution.
-   * Default "deny" — silence is not consent.
-   */
-  onExpiry?: "deny" | "approve";
-}
+// `ApprovalPolicy` and `ResolvedPolicy` live in types.ts so an
+// `ApprovalRequest` can carry its own policy without a circular import. They
+// are re-exported here because this is where callers look for them.
+export type { ApprovalPolicy, ResolvedPolicy } from "../types.js";
 
 export const DEFAULT_POLICY: Required<
   Pick<
@@ -49,8 +30,6 @@ export const DEFAULT_POLICY: Required<
   onExpiry: "deny",
 };
 
-export type ResolvedPolicy = typeof DEFAULT_POLICY;
-
 /**
  * Layers a policy over the defaults, ignoring keys that are explicitly
  * `undefined`.
@@ -69,11 +48,13 @@ export type ResolvedPolicy = typeof DEFAULT_POLICY;
  * place rather than at every call site.
  */
 export function mergePolicy(policy: ApprovalPolicy): ResolvedPolicy {
-  const merged: Record<string, unknown> = { ...DEFAULT_POLICY };
+  // Start from a complete policy, then layer on only what the caller actually
+  // set, so the result is a valid `ResolvedPolicy` at every point.
+  const merged: ResolvedPolicy = { ...DEFAULT_POLICY, name: policy.name };
   for (const [key, value] of Object.entries(policy)) {
-    if (value !== undefined) merged[key] = value;
+    if (value !== undefined) (merged as unknown as Record<string, unknown>)[key] = value;
   }
-  return merged as ResolvedPolicy;
+  return merged;
 }
 
 /** Two different people must sign off. The requester is not one of them. */
@@ -125,7 +106,7 @@ export function canVote(
   }
 
   if (!merged.allowedRoles.includes(participant.role)) {
-    const allowlisted = policy.allowedParticipants?.includes(participant.id) ?? false;
+    const allowlisted = merged.allowedParticipants?.includes(participant.id) ?? false;
     if (!allowlisted) {
       return {
         eligible: false,

@@ -149,3 +149,155 @@ describe("ApprovalGate", () => {
     expect(actions).toContain("approval.resolved");
   });
 });
+
+/**
+ * A gate whose policy lives in the process loses it on restart. Before R2, a
+ * four-eyes request that outlived a deploy resolved on one signature and the
+ * audit trail showed nothing unusual — a governance control weakening in
+ * silence, which is the worst shape a bug in this package can take.
+ *
+ * "Restart" here is a second `ApprovalGate` sharing only the store, which is
+ * exactly what a redeployed process is.
+ */
+describe("policy persistence", () => {
+  it("stores the resolved policy on the request", async () => {
+    const { gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: fourEyes(),
+    });
+
+    expect(request.policy).toMatchObject({
+      name: "four-eyes",
+      quorum: 2,
+      excludeRequester: true,
+      // Defaults resolved at request time, not left to be re-derived later.
+      denyIsFinal: true,
+      onExpiry: "deny",
+      allowedRoles: ["owner", "editor", "approver"],
+    });
+  });
+
+  it("still needs two approvals after a restart", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: { amountCents: 400_000 },
+      summary: "Refund $4,000",
+      policy: fourEyes(),
+    });
+
+    // The deploy. Nothing survives but the store.
+    const restarted = new ApprovalGate(store, bus);
+
+    const afterOne = await restarted.vote(request.id, "bob", "approve");
+    expect(afterOne.status).toBe("pending");
+
+    await store.addParticipant("s1", person("dave"));
+    const afterTwo = await restarted.vote(request.id, "dave", "approve");
+    expect(afterTwo.status).toBe("approved");
+  });
+
+  it("still excludes the requester after a restart", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: fourEyes(),
+    });
+
+    const restarted = new ApprovalGate(store, bus);
+
+    await expect(restarted.vote(request.id, "alice", "approve")).rejects.toThrow(
+      /cannot approve their own/i,
+    );
+  });
+
+  it("keeps a role restriction across a restart", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: quorumOf(1, { allowedRoles: ["owner"] }),
+    });
+
+    const restarted = new ApprovalGate(store, bus);
+
+    // bob is an editor, which this policy does not permit.
+    await expect(restarted.vote(request.id, "bob", "approve")).rejects.toThrow(
+      /not permitted/i,
+    );
+  });
+
+  it("keeps an explicit participant allowlist across a restart", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      // carol is a viewer, allowlisted by id.
+      policy: quorumOf(1, { allowedRoles: ["owner"], allowedParticipants: ["carol"] }),
+    });
+
+    const restarted = new ApprovalGate(store, bus);
+    const resolved = await restarted.vote(request.id, "carol", "approve");
+
+    expect(resolved.status).toBe("approved");
+  });
+
+  it("expires on the restarted gate's own schedule, not the default", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: fourEyes({ expiresAfterMs: 60_000, onExpiry: "approve" }),
+    });
+
+    expect(request.expiresAt).toBe(request.createdAt + 60_000);
+
+    const restarted = new ApprovalGate(store, bus);
+    // Force the clock past expiry by rewriting the record.
+    await store.saveApproval({ ...request, expiresAt: Date.now() - 1 });
+
+    const refreshed = await restarted.refresh(request.id);
+    // onExpiry: "approve" is unusual, which is what makes it a good probe —
+    // the default would have denied.
+    expect(refreshed?.status).toBe("approved");
+  });
+
+  it("does not fall back to the gate's default policy", async () => {
+    const { store, bus, gate } = await setup();
+    const request = await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: fourEyes(),
+    });
+
+    // A restarted process configured with a *weaker* default must not apply it
+    // to a request that was made under a stricter one.
+    const restarted = new ApprovalGate(store, bus, { name: "lax", quorum: 1 });
+    const afterOne = await restarted.vote(request.id, "bob", "approve");
+
+    expect(afterOne.status).toBe("pending");
+  });
+});

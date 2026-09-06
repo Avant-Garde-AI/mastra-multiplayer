@@ -168,20 +168,33 @@ and resolves when the first person opens the page. Call `refresh()` from your ow
 scheduler if the resolution time needs to be accurate. Making this less
 awkward is [R8](./ROADMAP.md#r8--durable-expiry).
 
-## Known limitation: policies do not survive a restart
+## Policies are stored on the request
 
-`ApprovalGate` keeps policies in a process-local `Map` keyed by approval id. The
-`ApprovalRequest` persists `policyName` — a label — but not the policy.
+The **resolved** policy — every defaultable field filled in — is written onto
+the `ApprovalRequest` when it is created, and read back from there on every vote
+and refresh.
 
-Restart the process with a request still pending, and the gate falls back to
-`defaultApprovalPolicy` (or `{ name: "default" }`, i.e. `quorum: 1`). **A
-four-eyes gate becomes a one-signature gate across a deploy**, and nothing warns
-you.
+```ts
+request.policy
+// { name: "four-eyes", quorum: 2, excludeRequester: true,
+//   allowedRoles: [...], denyIsFinal: true, expiresAfterMs: 900000,
+//   onExpiry: "deny" }
+```
 
-Until [R2](./ROADMAP.md#r2--persisted-approval-policies)
-lands, either keep `expiresAfterMs` shorter than your deploy cadence, or pass
-the same non-default `defaultApprovalPolicy` you use for gates so the fallback
-is not weaker than the intent.
+This matters for two reasons beyond surviving a restart:
+
+- **A later release that changes a default cannot retroactively change a
+  pending gate.** The decision a requester saw is the decision that resolves.
+- **The record is self-describing.** An auditor reading the ledger months later
+  can see the rule that was applied, not just its name.
+
+Storing the resolved policy rather than the caller's sparse object is the whole
+point. `fourEyes()` names a rule; `{ quorum: 2, excludeRequester: true, ... }`
+*is* the rule.
+
+A request created before this existed has no `policy`, and the gate falls back
+to its configured default with a loud `console.error` naming the approval —
+that fallback is the exact failure this design ends, so it is never silent.
 
 ## Client-side rendering
 

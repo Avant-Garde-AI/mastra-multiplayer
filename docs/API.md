@@ -84,6 +84,10 @@ Reached as `multiplayer.approvals`.
 Policies: `ApprovalPolicy`, `DEFAULT_POLICY`, `ResolvedPolicy`, `mergePolicy`,
 `fourEyes`, `quorumOf`, `approverOnly`.
 
+`ApprovalPolicy` and `ResolvedPolicy` are declared in `types.ts` and re-exported
+here, because every `ApprovalRequest` carries a `ResolvedPolicy` and the record
+has to describe itself without importing the module that builds it.
+
 Pure helpers, safe on the client: `canVote`, `evaluate`, `remainingApprovals`,
 `bindingHashFor`.
 
