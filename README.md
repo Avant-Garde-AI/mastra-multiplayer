@@ -143,7 +143,24 @@ Long shared threads outgrow the context window faster than single-user ones. Mas
 
 `MultiplayerStore` covers only what Mastra does not model: the participant roster, presence, approvals, and audit. Messages and threads stay in Mastra's own storage.
 
-`InMemoryMultiplayerStore` ships for development and tests. It loses everything on restart and does not work across processes — implement the interface against your database before shipping.
+Two implementations ship: `InMemoryMultiplayerStore` for development and tests (it loses everything on restart), and `LibSQLMultiplayerStore` for deployment on LibSQL, SQLite, or Turso.
+
+```ts
+import { LibSQLMultiplayerStore } from "mastra-multiplayer/storage/libsql";
+
+const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
+await store.migrate();
+```
+
+Writing your own? Run the conformance suite against it — 38 framework-agnostic checks covering the parts of the contract the type signatures do not show:
+
+```ts
+import { conformanceChecks } from "mastra-multiplayer/storage/conformance";
+
+for (const check of conformanceChecks()) {
+  it(`${check.group} — ${check.name}`, () => check.run(makeFreshStore()));
+}
+```
 
 ## HTTP surface
 
@@ -170,7 +187,7 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 ## Known limitations
 
-- **Single process.** `EventBus`, `TurnController`, and `InMemoryMultiplayerStore` all hold state in memory, so a second instance splits the room in half. Multi-instance deployments need Redis or Postgres-backed implementations of the same interfaces.
+- **Single process.** `EventBus` and `TurnController` hold state in memory, so a second instance splits the room in half. Storage is solved — `LibSQLMultiplayerStore` is durable — but the bus is not yet.
 - **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
 - **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.

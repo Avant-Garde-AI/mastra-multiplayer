@@ -10,6 +10,8 @@ Every exported symbol, by entry point. Types are in
 | `mastra-multiplayer/client` | `MultiplayerClient` |
 | `mastra-multiplayer/client/react` | `useMultiplayerSession` |
 | `mastra-multiplayer/storage` | `MultiplayerStore`, `InMemoryMultiplayerStore` |
+| `mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
+| `mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
 `src/` imports either — Mastra and Hono types are declared structurally
@@ -215,5 +217,21 @@ not reconnect it.** Remount with a `key` when the session changes.
 
 ## Storage
 
-`MultiplayerStore` (interface) and `InMemoryMultiplayerStore`.
-[STORAGE](./STORAGE.md) covers implementing it.
+`MultiplayerStore` (interface), `InMemoryMultiplayerStore` (development),
+`LibSQLMultiplayerStore` (durable).
+
+```ts
+const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
+await store.migrate();   // idempotent
+```
+
+`@libsql/client` is an optional peer dependency, imported by that subpath alone.
+`LibSQLLikeClient` is declared structurally, so a real `Client` satisfies it
+without this package depending on the driver.
+
+`conformanceChecks()` → `ConformanceCheck[]`, each `{ group, name, run(store) }`.
+Framework-agnostic and dependency-free; drive them from whatever test runner you
+use. `conformanceGroups()` lists the group names.
+
+[STORAGE](./STORAGE.md) covers implementing the interface and what the suite
+does not check.
