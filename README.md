@@ -165,10 +165,11 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 **`authenticate` is load-bearing.** Whatever it returns is the identity every message, vote, and audit entry is attributed to. It must derive from a verified session, never from the request body, or the four-eyes rule is decorative.
 
+**`authorize` decides whether that identity may act on this session.** It defaults to roster membership — so a participant cannot read a session they have not joined — and receives the route being accessed, so individual capabilities can be gated separately. See [security](./docs/SECURITY.md#session-level-authorization).
+
 ## Known limitations
 
 - **Single process.** `EventBus`, `TurnController`, and `InMemoryMultiplayerStore` all hold state in memory, so a second instance splits the room in half. Multi-instance deployments need Redis or Postgres-backed implementations of the same interfaces.
-- **`authenticate` establishes identity, not membership.** Any authenticated participant can pass any `sessionId` and read that session. Enforce access inside your `authenticate` until this is built in — see [security](./docs/SECURITY.md#no-session-level-authorization).
 - **Approval policies are held in memory** on the `ApprovalGate` instance, so a restart mid-approval falls back to the default — a four-eyes gate silently becomes a one-signature gate. Persisting the policy alongside the request is the next fix.
 - **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
