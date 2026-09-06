@@ -21,7 +21,30 @@ Initial scaffold.
   reconnect-from-sequence, and a headless React hook.
 - `InMemoryMultiplayerStore` for development and tests.
 
+### Fixed
+- A closed SSE stream no longer publishes `participant.left`. A stream closes on
+  every reconnect and tab switch, which was evicting people from everyone else's
+  roster while they were still in the session. `PresenceManager.disconnected()`
+  clears presence and leaves the roster alone; `leave()` is unchanged.
+- `GET /sessions/:id/state` and `MultiplayerClient.hydrate()` — a client opening
+  a session that had been running longer than the replay buffer rendered an
+  empty room, with open approval gates invisible. `MultiplayerClient.start()`
+  sequences join → hydrate → connect.
+- Policy resolution ignores explicitly-`undefined` overrides. Building a policy
+  from optional config previously let `undefined` replace a default: `quorum`
+  made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
+  `allowedRoles` threw in `canVote`.
+
+### Packaging
+- Added `repository`, `homepage`, `bugs`, `publishConfig`, and a
+  `"./package.json"` export.
+- `CHANGELOG.md` is now published (`files`).
+- Removed `.npmignore`, which npm ignores when `files` is present.
+
 ### Known gaps
 - Single-process bus and store.
 - Approval policies are not persisted across restarts.
+- `authenticate` establishes identity but not session membership.
 - No CRDT/co-editing layer.
+
+See [docs/ROADMAP.md](./docs/ROADMAP.md).

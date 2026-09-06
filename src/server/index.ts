@@ -127,7 +127,9 @@ export function multiplayerRoutes(
           cancel: () => {
             unsubscribe?.();
             if (heartbeat) clearInterval(heartbeat);
-            void session.presence.leave(sessionId, participant.id);
+            // A closed stream is a dropped transport, not a departure. Clear
+            // presence; let `/leave` be the thing that empties the roster.
+            void session.presence.disconnected(sessionId, participant.id);
           },
         });
 
@@ -138,6 +140,34 @@ export function multiplayerRoutes(
     /* ---------------------------------------------------------------- */
     /* Roster and presence                                               */
     /* ---------------------------------------------------------------- */
+    {
+      path: `${base}/sessions/:sessionId/state`,
+      method: "GET",
+      handler: async (c) => {
+        const participant = await auth(c);
+        if (!participant) return unauthorized(c);
+        const sessionId = c.req.param("sessionId")!;
+
+        const record = await session.store.getSession(sessionId);
+        if (!record) return c.json({ error: "Unknown session" }, 404);
+
+        const [participants, presence, approvals] = await Promise.all([
+          session.store.listParticipants(sessionId),
+          session.store.listPresence(sessionId),
+          session.approvals.pending(sessionId),
+        ]);
+
+        return c.json({
+          session: record,
+          participants,
+          presence,
+          approvals,
+          // The sequence this snapshot is consistent with. Reconnect the
+          // stream from here and no event is seen twice or missed.
+          seq: session.bus.currentSeq(sessionId),
+        });
+      },
+    },
     {
       path: `${base}/sessions/:sessionId/join`,
       method: "POST",

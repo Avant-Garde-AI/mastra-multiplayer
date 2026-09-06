@@ -69,3 +69,34 @@ describe("PresenceManager", () => {
     expect(seen).toEqual(["typing", "active"]);
   });
 });
+
+/**
+ * A dropped SSE stream and a departure look identical to the transport and are
+ * completely different to the room. Reconnects, tab switches, and a laptop lid
+ * all close the stream while the person is still sitting in the session.
+ */
+describe("PresenceManager.disconnected", () => {
+  it("clears presence without evicting anyone from the roster", async () => {
+    const { bus, presence } = await setup(() => 0);
+    const seen: string[] = [];
+    bus.subscribe("s1", (event) => seen.push(event.type));
+
+    await presence.heartbeat("s1", "alice");
+    const remaining = await presence.disconnected("s1", "alice");
+
+    expect(remaining).toEqual([]);
+    expect(seen).not.toContain("participant.left");
+    expect(seen.filter((t) => t === "presence.updated")).toHaveLength(2);
+  });
+
+  it("still announces a departure when someone actually leaves", async () => {
+    const { bus, presence } = await setup(() => 0);
+    const seen: string[] = [];
+    bus.subscribe("s1", (event) => seen.push(event.type));
+
+    await presence.heartbeat("s1", "alice");
+    await presence.leave("s1", "alice");
+
+    expect(seen).toContain("participant.left");
+  });
+});

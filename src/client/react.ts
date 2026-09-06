@@ -30,8 +30,7 @@ export function useMultiplayerSession(
   const client = clientRef.current;
 
   useEffect(() => {
-    client.connect();
-    void client.join();
+    void client.start();
     return () => client.disconnect();
   }, [client]);
 

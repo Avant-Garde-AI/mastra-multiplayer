@@ -1,5 +1,9 @@
 # Architecture
 
+How the layers fit together and why. For the vocabulary, read
+[CONCEPTS](./CONCEPTS.md) first; for the reasoning behind individual choices,
+the [decision records](./decisions/).
+
 ## Layering
 
 ```
@@ -30,7 +34,8 @@
 
 Two storage systems on purpose. Mastra owns the conversation; this package owns
 the social layer around it. Duplicating messages into a second store would give
-you two sources of truth and a reconciliation bug.
+you two sources of truth and a reconciliation bug —
+[ADR 0001](./decisions/0001-two-storage-systems.md).
 
 ## Why SSE and not WebSockets
 
@@ -44,9 +49,11 @@ passes through proxies and CDNs that mangle WebSocket upgrades, and it
 reconnects with `Last-Event-ID` for free. Mastra's own agent streaming is
 already SSE, so there is one transport rather than two.
 
-The cost is head-of-line blocking on HTTP/1.1 connection limits. If you need
-live cursors at 60fps, add a dedicated CRDT transport alongside this rather
-than replacing it.
+The cost is head-of-line blocking on HTTP/1.1 connection limits, and that
+`EventSource` cannot send custom headers — so bearer-token auth works on every
+route except the stream. If you need live cursors at 60fps, add a dedicated CRDT
+transport alongside this rather than replacing it.
+[ADR 0002](./decisions/0002-sse-over-websockets.md).
 
 ## Sequencing and replay
 
@@ -57,6 +64,13 @@ correctness problem into a latency one.
 The replay buffer is bounded (200 events by default). A client gone longer than
 that should refetch session state rather than replaying — the buffer is for
 network blips, not for cold starts.
+
+Cold starts are what `GET /sessions/:id/state` is for. It returns the roster,
+presence, and open approvals together with the `seq` they are consistent with,
+so a client hydrates and then opens the stream from exactly that point. Order
+matters: hydrating *after* connecting leaves a window where replayed frames
+below the snapshot are still in flight and would be skipped by the cursor
+jumping forward. `MultiplayerClient.start()` sequences it correctly.
 
 ## Concurrency
 
@@ -85,6 +99,16 @@ hash identically but `{amount:40}` and `{amount:4000}` do not.
 
 `assertBinding()` must be called immediately before the side effect, not at
 approval time. Anything else leaves a window.
+[ADR 0005](./decisions/0005-approval-argument-binding.md).
+
+## Roster and presence are separate
+
+The roster is who belongs to the session; presence is who is here right now.
+They change on different events and for different reasons, and conflating them
+is the classic bug in this kind of system — a dropped SSE stream is a reconnect,
+a tab switch, or a closed laptop, not a departure. `PresenceManager.leave()`
+announces a departure; `disconnected()` only clears presence.
+[ADR 0003](./decisions/0003-heartbeat-presence.md).
 
 ## What is deliberately not here
 
@@ -94,3 +118,14 @@ approval time. Anything else leaves a window.
   to stay open for days across deploys, put it in Temporal, Inngest, Restate,
   or Durable Objects and use this package for the human-facing half.
 - **A UI.** The hook is headless. Design systems do not survive being vendored.
+
+The full list, with reasoning, is in the roadmap's
+[Deliberately not doing](./ROADMAP.md#deliberately-not-doing) section.
+
+## What is not here yet
+
+Everything above describes one process. `EventBus`, `TurnController`, and
+`InMemoryMultiplayerStore` all hold state in memory, so a second instance splits
+the room in half. Making that work is the `0.2.0` milestone — the interfaces
+were shaped for it, and nothing outside `src/bus/` depends on how the bus fans
+out. See [ROADMAP](./ROADMAP.md#now--the-020-milestone).

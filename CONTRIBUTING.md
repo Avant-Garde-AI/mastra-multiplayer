@@ -2,10 +2,12 @@
 
 ```bash
 npm install
-npm test          # vitest
-npm run typecheck # tsc --noEmit
+npm run check     # typecheck + tests + doc links — run this before pushing
 npm run build     # tsup → dist/
 ```
+
+Individually: `npm test` (vitest), `npm run typecheck` (tsc --noEmit),
+`npm run docs:check` (relative markdown links and heading anchors).
 
 ## Conventions
 
@@ -18,6 +20,21 @@ npm run build     # tsup → dist/
 - New behaviour needs a test. The approval policy engine in particular is pure
   and has no excuse.
 - Prefer adding a mode or policy over adding a flag to an existing one.
+
+## Documentation
+
+Docs live in [`docs/`](./docs) and are part of the change, not a follow-up.
+
+- If a change alters behaviour someone could rely on, update the page that
+  describes it in the same commit. A page describing something the code does not
+  do is a bug in the page.
+- Roadmap items have stable ids (`R1`, `R2`, …). Reference them in commits and
+  issues, and move the item's status when the work lands rather than leaving the
+  list to drift.
+- A choice that is hard to reverse, or that you have now explained twice, earns
+  a [decision record](./docs/decisions). Include what it costs and what would
+  reopen it — a record with no downsides listed is a justification, not a
+  decision.
 
 ## Naming
 
