@@ -117,6 +117,12 @@ is still pending. None of this depends on the client.
 is not consent. Both are defaults you can change, which means changing them is
 a decision someone made and can be pointed at in a review.
 
+**Policies are stored on the request,** resolved at creation time. A restart
+mid-approval cannot weaken a gate, and a later release that changes a default
+cannot retroactively change a pending one — the rule a requester saw is the rule
+that resolves. It is also what makes the audit ledger meaningful: the record
+carries the policy that was applied, not just its name.
+
 **Audit.** Every request, vote, and resolution is written with the acting
 participant and a timestamp. The ledger is append-only through the interface.
 
@@ -124,7 +130,6 @@ participant and a timestamp. The ledger is append-only through the interface.
 
 | | |
 | --- | --- |
-| **Policies do not survive a restart** | `ApprovalGate` holds them in a process-local `Map`. A restart mid-approval drops a four-eyes gate to the `quorum: 1` default, silently. Mitigate by keeping `expiresAfterMs` under your deploy cadence and setting `defaultApprovalPolicy` to something no weaker than your strictest gate. Fixed by [R2](./ROADMAP.md#r2--persisted-approval-policies). |
 | **`interrupt()` is not role-gated** | Anyone in a session can stop its agent, including a `viewer`. Deliberate — a room can stop its own agent — but it is a denial-of-service vector in a large or semi-public session. |
 | **`preempt` mode is weaponizable** | One participant can cancel everyone else's turn by typing. Consider `queue` or `batch` for sessions with people who do not all trust each other. |
 | **No rate limiting** | Nothing bounds messages, heartbeats, or stream connections per participant. Put it in front of these routes. |

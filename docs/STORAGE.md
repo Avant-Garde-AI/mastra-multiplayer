@@ -77,6 +77,12 @@ exist, rather than silently creating one. Match that.
 - **`saveApproval` is an upsert** used for both creation and every vote. Votes
   are stored as an array on the request; if you normalize them into a votes
   table, `saveApproval` has to reconcile rather than append blindly.
+- **`ApprovalRequest.policy` must round-trip exactly.** It is the resolved
+  governance rule, not a label, and the gate reads it back on every vote. A
+  store that drops it, truncates it, or reconstructs it from a name has
+  reintroduced the bug it exists to prevent — a four-eyes gate resolving on one
+  signature. JSON column, stored verbatim, is the right shape; `allowedRoles`
+  and `allowedParticipants` are arrays and must survive as arrays.
 - **`listAudit` returns the *most recent* `limit` entries, oldest first within
   that window.** The in-memory version is `slice(-limit)`. A naive
   `ORDER BY at ASC LIMIT n` returns the oldest entries instead — the opposite —

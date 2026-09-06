@@ -74,6 +74,58 @@ export interface SessionRecord {
 
 export type ApprovalDecision = "approve" | "deny";
 
+/**
+ * What "enough people said yes" means for one action: how many, who, what a
+ * "no" means, and what silence means.
+ *
+ * Lives here rather than in `approvals/policy.ts` because a resolved policy is
+ * stored on every `ApprovalRequest` — the record has to be able to describe
+ * itself without importing the module that builds it.
+ */
+export interface ApprovalPolicy {
+  name: string;
+  /** How many approve votes are needed. Default 1. */
+  quorum?: number;
+  /**
+   * When true, the participant who requested the action cannot approve it.
+   * This is the four-eyes / maker-checker rule.
+   */
+  excludeRequester?: boolean;
+  /** Only these roles may vote. Default: owner, editor, approver. */
+  allowedRoles?: ParticipantRole[];
+  /** Explicit allowlist of participant ids, checked in addition to roles. */
+  allowedParticipants?: ParticipantId[];
+  /** A single deny resolves the request. Default true. */
+  denyIsFinal?: boolean;
+  /** How long the request stays open. Default 15 minutes. */
+  expiresAfterMs?: number;
+  /**
+   * What happens when the request expires with no resolution.
+   * Default "deny" — silence is not consent.
+   */
+  onExpiry?: "deny" | "approve";
+}
+
+/**
+ * A policy with every defaultable field filled in.
+ *
+ * This is the shape that gets persisted, because the decision a requester saw
+ * has to be the decision that resolves — including after a restart, and
+ * including after a later release changes a default.
+ */
+export type ResolvedPolicy = ApprovalPolicy &
+  Required<
+    Pick<
+      ApprovalPolicy,
+      | "quorum"
+      | "excludeRequester"
+      | "allowedRoles"
+      | "denyIsFinal"
+      | "expiresAfterMs"
+      | "onExpiry"
+    >
+  >;
+
 export interface ApprovalVote {
   participantId: ParticipantId;
   decision: ApprovalDecision;
@@ -104,7 +156,15 @@ export interface ApprovalRequest {
   /** Stable hash of `${toolName}:${toolArgs}` — the thing being approved. */
   bindingHash: string;
   summary: string;
-  policyName: string;
+  /**
+   * The resolved policy this request is governed by, stored on the record
+   * rather than held in memory.
+   *
+   * A gate whose policy lives in the process loses it on restart and silently
+   * falls back to the default — a four-eyes rule becoming a one-signature rule
+   * across a deploy, with nothing in the audit trail to show it.
+   */
+  policy: ResolvedPolicy;
   status: ApprovalStatus;
   votes: ApprovalVote[];
   createdAt: number;

@@ -10,10 +10,11 @@ import type {
   SessionId,
 } from "../types.js";
 import {
-  DEFAULT_POLICY,
   canVote,
   evaluate,
+  mergePolicy,
   type ApprovalPolicy,
+  type ResolvedPolicy,
 } from "./policy.js";
 
 export * from "./policy.js";
@@ -69,8 +70,6 @@ function stableStringify(value: unknown): string {
  * sign-off, with every step written to the audit ledger.
  */
 export class ApprovalGate {
-  private policies = new Map<string, ApprovalPolicy>();
-
   constructor(
     private readonly store: MultiplayerStore,
     private readonly bus: EventBus,
@@ -78,8 +77,10 @@ export class ApprovalGate {
   ) {}
 
   async request(input: RequestApprovalInput): Promise<ApprovalRequest> {
-    const policy = input.policy ?? this.defaultPolicy;
-    const expiresAfterMs = policy.expiresAfterMs ?? DEFAULT_POLICY.expiresAfterMs;
+    // Resolved once, here, and stored. The governance decision a requester saw
+    // is the one that must resolve the gate — after a restart, and after a
+    // later release changes a default.
+    const policy = mergePolicy(input.policy ?? this.defaultPolicy);
     const now = Date.now();
 
     const request: ApprovalRequest = {
@@ -90,16 +91,15 @@ export class ApprovalGate {
       toolArgs: input.toolArgs,
       bindingHash: bindingHashFor(input.toolName, input.toolArgs),
       summary: input.summary,
-      policyName: policy.name,
+      policy,
       status: "pending",
       votes: [],
       createdAt: now,
-      expiresAt: now + expiresAfterMs,
+      expiresAt: now + policy.expiresAfterMs,
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.stepId ? { stepId: input.stepId } : {}),
     };
 
-    this.policies.set(request.id, policy);
     await this.store.saveApproval(request);
     await this.audit(request.sessionId, "approval.requested", input.requestedBy, {
       approvalId: request.id,
@@ -139,7 +139,7 @@ export class ApprovalGate {
       throw new ApprovalError("Participant is not in this session", "not_eligible");
     }
 
-    const policy = this.policies.get(approvalId) ?? this.defaultPolicy;
+    const policy = this.policyFor(request);
     const eligibility = canVote(policy, request, participant);
     if (!eligibility.eligible) {
       throw new ApprovalError(eligibility.reason ?? "Not eligible", "not_eligible");
@@ -189,8 +189,7 @@ export class ApprovalGate {
     const request = await this.store.getApproval(approvalId);
     if (!request || request.status !== "pending") return request;
 
-    const policy = this.policies.get(approvalId) ?? this.defaultPolicy;
-    const status = evaluate(policy, request);
+    const status = evaluate(this.policyFor(request), request);
     if (status === "pending") return request;
 
     request.status = status;
@@ -224,6 +223,25 @@ export class ApprovalGate {
 
   async pending(sessionId: SessionId): Promise<ApprovalRequest[]> {
     return this.store.listApprovals(sessionId, "pending");
+  }
+
+  /**
+   * The policy governing a request.
+   *
+   * Falls back to the configured default only for a record written before
+   * policies were persisted. That fallback is the exact failure this method
+   * exists to end, so it is loud rather than silent — a four-eyes gate
+   * quietly resolving under `quorum: 1` is the worst-shaped bug this package
+   * can have.
+   */
+  private policyFor(request: ApprovalRequest): ResolvedPolicy {
+    if (request.policy) return request.policy;
+    console.error(
+      `[mastra-multiplayer] approval ${request.id} has no stored policy; ` +
+        `falling back to "${this.defaultPolicy.name}". It was created by an ` +
+        `older version and its original policy is unrecoverable.`,
+    );
+    return mergePolicy(this.defaultPolicy);
   }
 
   private async audit(

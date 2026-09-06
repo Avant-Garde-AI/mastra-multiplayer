@@ -85,6 +85,7 @@ Three properties worth knowing about:
 
 - **Approvals are bound to arguments.** A SHA-256 of `toolName + stable(args)` is stored on the request. `assertBinding()` re-checks it before execution, so an approval for a $40 refund cannot be replayed against a $4,000 one.
 - **Deny is final by default,** and expiry defaults to `deny`. Silence is not consent.
+- **The resolved policy is stored on the request,** so a restart mid-approval cannot weaken a gate, and a later release that changes a default cannot retroactively change a pending one.
 - **Every request, vote, and resolution is written to the audit ledger** with the participant id attached.
 
 ### 3. Shared-session event bus
@@ -170,7 +171,6 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 ## Known limitations
 
 - **Single process.** `EventBus`, `TurnController`, and `InMemoryMultiplayerStore` all hold state in memory, so a second instance splits the room in half. Multi-instance deployments need Redis or Postgres-backed implementations of the same interfaces.
-- **Approval policies are held in memory** on the `ApprovalGate` instance, so a restart mid-approval falls back to the default — a four-eyes gate silently becomes a one-signature gate. Persisting the policy alongside the request is the next fix.
 - **Approval expiry is lazy.** Nothing fires on its own; a request expires when someone next votes or refreshes it. Gates that stay open for hours belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
 - **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.

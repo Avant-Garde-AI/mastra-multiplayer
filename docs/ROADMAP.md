@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · Phases 0 and 1 shipped
+Last gardened: 2026-09-06 · against `0.1.0` · Phases 0–1 shipped, Phase 2 in progress
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -92,7 +92,7 @@ number and clients will silently drop half the events.
 
 ### R2 · Persisted approval policies
 
-`next` · size `M` · confidence `high`
+`shipped` · size `M` · confidence `high`
 
 **Problem.** `ApprovalGate` holds policies in a private `Map` keyed by approval
 id. Restart the process mid-approval and the policy is gone; the gate falls back
@@ -100,14 +100,31 @@ to the default, which is `quorum: 1`. A four-eyes gate quietly becomes a
 one-signature gate across a deploy. This is a governance bug, not an
 inconvenience.
 
-**Done when** the resolved policy is stored on the `ApprovalRequest` itself, the
-store round-trips it, `vote()` and `refresh()` read it from the request rather
-than the in-memory map, and a test resolves a four-eyes gate through a
-brand-new `ApprovalGate` instance sharing only the store.
+**Shipped.** `ApprovalRequest.policy` carries the resolved policy; the
+process-local `Map` is gone. `vote()` and `refresh()` read from the record.
 
-**Notes.** Store the *resolved* policy (post-`mergePolicy`), not the caller's
-sparse object. A policy that resolves differently after an upgrade is a
-different governance decision than the one the requester saw.
+The stored policy is the *resolved* one, which buys more than restart safety:
+a later release that changes a default cannot retroactively change a pending
+gate, and the audit ledger becomes self-describing — a reader months later sees
+the rule that was applied, not just its name.
+
+Two shape changes fell out of it:
+
+- `ApprovalPolicy` and `ResolvedPolicy` moved to `types.ts` (re-exported from
+  `approvals/policy.js`, so the public API is unchanged) — a record that carries
+  its own policy cannot import the module that builds it.
+- `ApprovalRequest.policyName` is **removed**, superseded by `policy.name`. Two
+  fields holding the same string is how they drift.
+
+Also fixed while in here: `canVote` read `allowedParticipants` off the caller's
+raw policy rather than the resolved one. Harmless before, because the raw object
+was what got passed; a live bug the moment the resolved policy became the input.
+Widening `ResolvedPolicy` to `ApprovalPolicy & Required<...>` made the compiler
+find it.
+
+Seven tests, each driving a second `ApprovalGate` that shares only the store —
+which is exactly what a redeployed process is. Mutation-checked: ignoring the
+stored policy fails eight tests.
 
 ### R3 · Store-backed `MultiplayerStore` reference implementation
 

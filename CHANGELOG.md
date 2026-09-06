@@ -35,6 +35,29 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Approvals
+- **Approval policies are persisted on the request** (`R2`).
+  `ApprovalRequest.policy` carries the resolved policy — every defaultable
+  field filled in — and `vote()`/`refresh()` read from it. The process-local
+  `Map` is gone.
+
+  Previously a restart mid-approval dropped the policy and the gate fell back
+  to the default: a four-eyes gate silently became a one-signature gate across
+  a deploy. Storing the *resolved* policy also means a later release changing a
+  default cannot retroactively change a pending gate, and the audit ledger
+  carries the rule that was applied rather than just its name.
+
+  **Breaking:** `ApprovalRequest.policyName` is removed — use `policy.name`.
+  Custom `MultiplayerStore` implementations must round-trip `policy` verbatim.
+
+  `ApprovalPolicy` and `ResolvedPolicy` moved to `types.ts` and are re-exported
+  from `approvals/policy.js`; imports are unaffected.
+
+### Fixed (approvals)
+- `canVote` consulted `allowedParticipants` on the caller's raw policy rather
+  than the resolved one. Harmless while the raw object was the input; a live
+  bug once the resolved policy became it.
+
 ### Security
 - `multiplayerRoutes` takes an optional `authorize({ participant, sessionId,
   action, context })`, run on every route after `authenticate` (`R5`).
@@ -74,7 +97,6 @@ Initial scaffold.
 
 ### Known gaps
 - Single-process bus and store.
-- Approval policies are not persisted across restarts.
 - No CRDT/co-editing layer.
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).
