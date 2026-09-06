@@ -35,6 +35,17 @@ Initial scaffold.
   made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
   `allowedRoles` threw in `canVote`.
 
+### Testing and CI
+- GitHub Actions runs `npm run check` and `npm run build` on Node 20 and 22 for
+  every push to `main` and every pull request (`R13`).
+- `scripts/check-exports.mjs` verifies every path in the `exports` map exists
+  after a build, and that each subpath carries a `types` condition. The tests
+  import from `src/`, so a broken published surface was previously invisible.
+- 52 tests over the HTTP surface and the browser client (`R4`), on a fake Hono
+  context and a fake `EventSource` — routes, SSE framing and replay, auth
+  rejection, vote error codes, the client reducer, reconnect backoff, and
+  heartbeat lifecycle.
+
 ### Packaging
 - Added `repository`, `homepage`, `bugs`, `publishConfig`, and a
   `"./package.json"` export.
