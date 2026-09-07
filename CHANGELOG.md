@@ -51,6 +51,22 @@ Initial scaffold.
   is unreachable stops turns rather than degrading to "run anyway". Both are
   documented in `docs/CONCURRENCY.md`.
 
+### HTTP
+- **Backpressure on the SSE stream** (`R9`). `controller.enqueue` never blocks,
+  so a client that stops reading grew the server's queue without bound. Once
+  `streamHighWaterMark` frames (default 256) sit unsent, `agent.delta` is
+  dropped — the terminal `message` carries the assembled text — and anything
+  else closes the stream, so the client reconnects and replays from
+  `Last-Event-ID`.
+
+### Approvals (expiry)
+- `approvals.sweepExpired(sessionId)` and `sweepExpiredApprovals()` resolve
+  requests past their deadline (`R8`). Nothing fires on its own; call one from
+  your own scheduler. No timer ships in this package.
+- **`resolvedAt` is now the deadline, not the sweep time.** A request that
+  expired at 3am records 3am even if nothing noticed until 9am. The same holds
+  for a vote that lands after expiry.
+
 ### Logging
 - A `Logger` seam (`R10`): `createMultiplayer({ logger })` is threaded to the
   bus, presence manager, approval gate, and turn controller. `consoleLogger` is
@@ -148,6 +164,8 @@ Initial scaffold.
 - Removed `.npmignore`, which npm ignores when `files` is present.
 
 ### Known gaps
+- Nothing drives approval expiry for you — wire `sweepExpiredApprovals()` into
+  a scheduler you already run.
 - Turn-taking is per-process unless you configure a `TurnLease`. Without one,
   concurrent posts to different instances start two runs into one session.
 - No CRDT/co-editing layer.

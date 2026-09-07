@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · `0.2.0` complete, Phase 4 in progress
+Last gardened: 2026-09-06 · against `0.1.0` · `0.2.0` and Phase 4 complete
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -301,7 +301,7 @@ package.
 Deliberately left out of the launch-review pass because CI configuration is a
 choice about the project's infrastructure rather than a cleanup.
 
-## Now — Phase 4 · Operability (`0.3.0`)
+## Shipped — Phase 4 · Operability (`0.3.0`)
 
 The `0.2.0` theme was *surviving a second process*. This one is **behaving
 correctly once you are running more than one, and running unattended** — the
@@ -311,8 +311,8 @@ things that only show up after deployment.
 | --- | --- |
 | R14 · Cross-instance turn coordination | `shipped` |
 | R10 · Structured errors and a logger seam | `shipped` |
-| R9 · Backpressure on the SSE stream | `next` |
-| R8 · Durable expiry | `next` |
+| R9 · Backpressure on the SSE stream | `shipped` |
+| R8 · Durable expiry | `shipped` |
 
 R14 came first because it is a correctness gap left open by R1, and because
 finding out what was actually broken changed the design. R10 came with it
@@ -372,6 +372,42 @@ cannot break the caller — publishing an event should not fail because shipping
 log line did, and there is nothing useful to do about a logging failure except
 carry on.
 
+### R9 · Backpressure on the SSE stream
+
+`shipped` · size `S` · confidence `high`
+
+**Shipped.** Once `streamHighWaterMark` frames (default 256) sit unsent,
+`agent.delta` is dropped and everything else closes the stream, letting the
+client reconnect and replay from `Last-Event-ID`.
+
+The guess above was right about the policy and missed a prerequisite: without an
+explicit `CountQueuingStrategy` the high-water mark is **1**, so `desiredSize`
+goes non-positive after a single unread frame and every stream looks backed up.
+The check is worthless without the strategy, and a test pins the default.
+
+Mutation-checked: removing the check, dropping everything rather than only
+deltas, and reverting the high-water mark to 1 each fail their own tests.
+
+### R8 · Durable expiry
+
+`shipped` · size `M` · confidence `high`
+
+**Shipped**, and in the shape the note predicted: `approvals.sweepExpired(sessionId)`
+and `multiplayer.sweepExpiredApprovals()`, driven by the host's own scheduler.
+No timer in here — the right cadence depends on how tight your windows are, and
+a library that owns a scheduler owns a shutdown story and a leader-election
+story too.
+
+The "records the wrong time" half turned out to be a separate, smaller fix worth
+doing on its own: `resolvedAt` is now the **deadline**, not the moment someone
+noticed. A 3am expiry records 3am even if the sweep runs at 9am, because the
+ledger's job is to answer *when was this decided*. The same rule applies to a
+vote that lands after expiry.
+
+A sweep is idempotent, publishes `approval.resolved` and audits exactly as a
+vote does, and one unreadable record does not strand the rest of the session —
+a sweep that stopped on the first error would resolve nothing.
+
 ## Next — after Phase 4
 
 ### R6 · Workflow step factory for gates
@@ -396,29 +432,6 @@ Confidence is medium because it is unclear whether this belongs here or in a
 companion package. Each adapter drags in a vendor SDK, which fights the
 zero-dependency rule in [CONTRIBUTING](../CONTRIBUTING.md). Decide the packaging
 question before writing the first adapter.
-
-### R8 · Durable expiry
-
-`later` · size `M` · confidence `medium`
-
-Approval expiry is enforced lazily — `refresh()` re-evaluates against the clock
-when someone asks. Nothing fires on its own. A gate that expires at 3am resolves
-at 9am when the first person opens the page, and the audit ledger records the
-wrong time.
-
-The honest fix is a scheduler, and the honest answer to "which one" is probably
-"the one the host application already runs". Likely shape: a
-`checkExpiries()` method the host calls from its own scheduler, plus
-documentation saying so, rather than a timer this package owns.
-
-### R9 · Backpressure on the SSE stream
-
-`later` · size `S` · confidence `medium`
-
-`controller.enqueue` is called unconditionally on every event. A slow client on
-a busy session grows the stream's internal queue without bound. Needs a
-`desiredSize` check and a policy for what to drop — almost certainly
-`agent.delta`, since the terminal `message` event carries the full text anyway.
 
 ## Researching
 

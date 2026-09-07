@@ -1,4 +1,5 @@
 import { unrefTimer } from "../internal/timers.js";
+import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 import type { MultiplayerSession } from "../session.js";
 import type { MultiplayerEvent } from "../bus/events.js";
 import type { Participant } from "../types.js";
@@ -78,6 +79,18 @@ export interface MultiplayerRoutesOptions {
    * ahead of either.
    */
   authorize?: (input: AuthorizeInput) => boolean | Promise<boolean>;
+  /**
+   * How many SSE frames may sit unsent to one client before the stream applies
+   * backpressure. Default 256.
+   *
+   * `controller.enqueue` never blocks, so without a ceiling a client that stops
+   * reading — a suspended laptop, a stalled proxy — grows the server's queue
+   * until the process runs out of memory. A busy session streaming tokens can
+   * produce hundreds of frames a second, so this is not a slow leak.
+   */
+  streamHighWaterMark?: number;
+  /** Where to report a dropped or closed stream. Defaults to `console`. */
+  logger?: Logger;
 }
 
 const SSE_HEADERS = {
@@ -118,6 +131,8 @@ export function multiplayerRoutes(
 ): RouteDefinition[] {
   const base = options.basePath ?? "/multiplayer";
   const auth = options.authenticate;
+  const highWaterMark = options.streamHighWaterMark ?? 256;
+  const logger = safeLogger(options.logger ?? consoleLogger);
 
   const unauthorized = (c: HonoLikeContext) =>
     c.json({ error: "Unauthorized" }, 401);
@@ -198,6 +213,7 @@ export function multiplayerRoutes(
         let unsubscribe: (() => void) | null = null;
         let heartbeat: ReturnType<typeof setInterval> | null = null;
         let cancelled = false;
+        let dropped = 0;
 
         const stream = new ReadableStream<Uint8Array>({
           // `start` may return a promise, and the stream waits for it — so the
@@ -210,6 +226,39 @@ export function multiplayerRoutes(
               sessionId,
               afterSeq,
               (event) => {
+                // `desiredSize` falling to zero means this client is not
+                // keeping up. What happens next depends on the event.
+                const backedUp = (controller.desiredSize ?? 1) <= 0;
+
+                if (backedUp && event.type === "agent.delta") {
+                  // Deltas are the only droppable event: the terminal
+                  // `message` carries the assembled text, so a client that
+                  // misses them still ends up with the whole reply, just
+                  // without the typing effect.
+                  dropped++;
+                  return;
+                }
+
+                if (backedUp) {
+                  // Everything else is state the client cannot reconstruct, so
+                  // close the stream instead of dropping it. `EventSource`
+                  // reconnects with `Last-Event-ID` and replays from the last
+                  // frame actually delivered — the buffer exists for this.
+                  logger.warn("closing a backed-up SSE stream; client will reconnect", {
+                    sessionId,
+                    participantId: participant.id,
+                    droppedDeltas: dropped,
+                  });
+                  try {
+                    controller.close();
+                  } catch {
+                    /* already closed */
+                  }
+                  unsubscribe?.();
+                  if (heartbeat) clearInterval(heartbeat);
+                  return;
+                }
+
                 try {
                   controller.enqueue(encoder.encode(sseFrame(event)));
                 } catch {
@@ -243,7 +292,11 @@ export function multiplayerRoutes(
             // presence; let `/leave` be the thing that empties the roster.
             void session.presence.disconnected(sessionId, participant.id);
           },
-        });
+        },
+        // Without an explicit strategy the high-water mark is 1, so
+        // `desiredSize` goes non-positive after a single unread frame and every
+        // stream would look backed up.
+        new CountQueuingStrategy({ highWaterMark }));
 
         return c.body(stream as unknown as BodyInit, { headers: SSE_HEADERS });
       },

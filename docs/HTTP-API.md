@@ -122,6 +122,22 @@ deliver nothing until it decides to flush.
 A `: ping` comment frame every 15 seconds keeps proxies from closing an idle
 connection.
 
+**Backpressure.** `controller.enqueue` never blocks, so a client that stops
+reading — a suspended laptop, a stalled proxy — would otherwise grow the
+server's queue until the process runs out of memory. A busy session streaming
+tokens produces hundreds of frames a second, so that is not a slow leak.
+
+Once `streamHighWaterMark` frames (default 256) are queued unsent:
+
+- **`agent.delta` is dropped.** The terminal `message` event carries the
+  assembled text, so the client still ends up with the whole reply — just
+  without the typing effect.
+- **Anything else closes the stream.** A message, a roster change, an approval:
+  none can be reconstructed from later events. `EventSource` reconnects with
+  `Last-Event-ID` and replays from the last frame actually delivered, which is
+  what the replay buffer is for. A closure is logged at `warn` with the count of
+  deltas dropped first.
+
 Closing the stream clears the sender's presence but **does not** remove them
 from the roster. A stream closes on every reconnect and tab switch; only
 `POST /leave` is a departure.
