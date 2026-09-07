@@ -5,6 +5,57 @@ All notable changes to this package. Dates are the day the work landed on
 
 ## Unreleased
 
+### Workflows
+- `mastra-multiplayer/workflows` makes an approval gate a suspended workflow
+  step instead of a polling loop inside a tool (`R6`). `approvalStep` returns
+  `createStep` parameters — building a step converts schemas, which is
+  `@mastra/core`'s job, and returning parameters is what keeps the peer
+  optional. The waiting lives in Mastra's durable snapshot, so nothing holds an
+  agent run open and a deploy mid-decision costs nothing.
+
+  Verified against the published `@mastra/core` (`1.64.0`), not the monorepo
+  version the plan was researched from, and not a fake: `test/workflows.integration.test.ts`
+  runs the gate through the real engine.
+
+- `ApprovalResumer` is the other half, and the load-bearing one. Votes arrive
+  over this package's HTTP surface and workflows continue through
+  `run.resume()`; without something joining them a gate suspends for ever.
+  `start()` listens for decisions made in this process *and* reconciles the
+  store once for anything decided while nothing was listening.
+
+  It does not subscribe to the bus. `MultiplayerBus` is keyed by session, and
+  the bus is at-most-once — a resumer that relied on it would still need the
+  sweep. [ADR 0006](docs/decisions/0006-local-resume-not-bus.md) has the
+  reasoning.
+
+- **A denial `bail()`s the run; a binding mismatch throws.** A refused refund is
+  a completed run that did not refund anything. A run about to execute arguments
+  nobody approved is a failure, and `assertBinding` re-runs on resume — the
+  suspend/resume round trip is the exact window binding exists to close.
+
+- An expired gate resumes its run exactly like a denied one, so timing out is
+  not the one case that hangs. `sweepExpired` now drives it.
+
+### Approvals
+- `ApprovalGate.onResolved(handler)` — a local listener called when a request
+  stops being pending. Handlers are not awaited and one that throws is logged,
+  never propagated: reacting to a decision failing must not undo the decision.
+
+- `ApprovalRequest.workflowId` joins `runId` and `stepId`, which had existed
+  unused since `0.1.0`. The first thing to try to use them found a run id with
+  no registry key to look it up in.
+
+- `ApprovalRequest.resumedAt` records that a gate no longer needs waking, so the
+  reconciling sweep only looks at gates that might still be stuck. Without it
+  every approval ever resolved is re-checked on every sweep, for ever.
+
+  Both fields are optional and additive; existing records read back unchanged.
+
+### Examples
+- `examples/approval-gate/refund-workflow.ts` is the gate as a workflow step.
+  The polling version is kept as `refund-tool-polling.ts` — still the right
+  answer for an agent with no workflow to hang a gate on.
+
 ### Channels
 - `mastra-multiplayer/channels` maps a Mastra channel actor onto a
   `Participant`, so a session can span a web UI and a Slack thread with one

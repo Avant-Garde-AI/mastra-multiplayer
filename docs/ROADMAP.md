@@ -417,26 +417,44 @@ rather than assuming them — which changed both.
 
 ### R6 · Workflow-step approval gates
 
-`next` · size `L` · confidence `high`
+`shipped` · size `L` · confidence `high`
 
 Wrap Mastra's `suspend()` / `resume()` so an approval gate is a workflow step
 rather than a hand-rolled polling loop.
 
-**Grew from `M` to `L` after reading the API.** The factory is the easy half:
-votes arrive over this package's HTTP surface and workflows resume through
-`run.resume()`, and nothing connects them. Build only the step and every gate
-suspends for ever. The second piece is a *resumer* that watches the bus, plus
-the concurrency and start-up reconciliation that go with it.
+**Grew from `M` to `L` after reading the API,** and the estimate held. The
+factory is the easy half: votes arrive over this package's HTTP surface and
+workflows resume through `run.resume()`, and nothing connects them. Build only
+the step and every gate suspends for ever.
 
-`ApprovalRequest.runId` and `stepId` have existed unused since `0.1.0` — they
-are exactly the keys the resumer needs.
+**Shipped** as `mastra-multiplayer/workflows`: `approvalStep` (returns
+`createStep` parameters, so `@mastra/core` stays an optional peer) and
+`ApprovalResumer`. Verified against the real engine, not a fake — see
+`test/workflows.integration.test.ts`.
+
+The precondition was met before any code: `run.resume({ step, resumeData })`,
+`createStep`'s `resumeSchema` / `suspendSchema`, `bail()` and
+`createRun({ runId })` all behave as read on published `1.64.0`, not just on
+`main`.
+
+Four things the build changed or found:
+
+- **The resumer is not a bus subscriber.** `MultiplayerBus` is keyed by session
+  and the plan's "subscribe across sessions" is not something it can do without
+  new surface on both implementations — which would still have needed the
+  reconciling sweep behind it, because the bus is at-most-once. It listens
+  locally via `ApprovalGate.onResolved` and reconciles from the store instead.
+  [ADR 0006](./decisions/0006-local-resume-not-bus.md).
+- **`runId` and `stepId` were not enough.** They have existed unused since
+  `0.1.0`, and the first thing that tried to use them found a run id with no
+  registry key to look it up in. `ApprovalRequest.workflowId` joins them.
+- **`resumedAt` keeps the sweep cheap.** Without it every approval ever resolved
+  is re-checked against the workflow store on every sweep, for ever.
+- **A denial `bail()`s and a binding mismatch throws.** A refused refund is a
+  completed run; a run about to execute something nobody approved is not.
 
 R2 unblocked this: suspending across a restart was pointless while the policy
 did not survive one.
-
-**Precondition:** re-check against a *published* `@mastra/core`. The research
-read `1.65.0-alpha.7` from the monorepo, and this package's peer range is
-`>=1.0.0`.
 
 ### R7 · Channel participants
 

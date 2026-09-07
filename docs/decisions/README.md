@@ -10,6 +10,7 @@ reasoning attached. One file per decision, numbered, never renumbered.
 | [0003](./0003-heartbeat-presence.md) | Presence is heartbeat-based, not connection-based | Accepted |
 | [0004](./0004-structural-mastra-types.md) | Mastra and Hono types declared structurally, not imported | Accepted |
 | [0005](./0005-approval-argument-binding.md) | Approvals are bound to a hash of the exact call | Accepted |
+| [0006](./0006-local-resume-not-bus.md) | Workflow resumption is driven locally and reconciled from the store | Accepted |
 
 ## Writing one
 

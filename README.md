@@ -94,6 +94,7 @@ Three properties worth knowing about:
 - **Deny is final by default,** and expiry defaults to `deny`. Silence is not consent.
 - **The resolved policy is stored on the request,** so a restart mid-approval cannot weaken a gate, and a later release that changes a default cannot retroactively change a pending one.
 - **Every request, vote, and resolution is written to the audit ledger** with the participant id attached.
+- **A gate can be a workflow step rather than a wait.** `approvalStep` suspends a Mastra run and `ApprovalResumer` wakes it when the votes land, so nothing holds an agent run open and a deploy mid-decision costs nothing. [Details](./docs/APPROVALS.md#gates-as-workflow-steps).
 
 ### 3. Shared-session event bus
 
@@ -145,6 +146,33 @@ await bridge.receive({ surface: "slack", actor, threadId, text });
 ```
 
 No chat SDK involved — Mastra's `@chat-adapter/*` packages belong to your agent, and this is the mapping between its `actor` and a `Participant`. Bots are excluded by default, because one appearing in the roster could satisfy a four-eyes gate. [Details](./docs/CHANNELS.md).
+
+## Approval gates as workflow steps
+
+A gate that waits inside a tool holds an agent run open for as long as the humans take, and loses the wait if the process restarts. A suspended workflow step does neither:
+
+```ts
+import { createStep } from "@mastra/core/workflows";
+import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+
+const gate = createStep(approvalStep(multiplayer, {
+  id: "approve-refund",
+  inputSchema: refundArgs,
+  outputSchema: refundArgs,
+  workflowId: "refund",
+  toolName: "refund-order",
+  policy: fourEyes(),
+  sessionId: ({ inputData }) => inputData.sessionId,
+  requestedBy: ({ inputData }) => inputData.requestedBy,
+  summary: ({ inputData }) => `Refund $${inputData.amountCents / 100}`,
+}));
+
+await approvalResumer(multiplayer, mastra).start();
+```
+
+The step opens a request and suspends. Whenever the votes land — a minute later, or after a deploy — the resumer wakes the run, `assertBinding()` re-checks the arguments, and the next step executes. A denial bails the run instead.
+
+**The resumer is the half that is easy to forget.** Votes arrive over this package's HTTP surface and workflows continue through `run.resume()`; without something joining them, every gate suspends for ever. `start()` listens for decisions made in this process *and* reconciles the store for anything decided while nothing was listening. [Details](./docs/APPROVALS.md#gates-as-workflow-steps).
 
 ## Attribution
 
@@ -225,8 +253,8 @@ The base path must not start with `/api` — Mastra reserves that prefix.
 
 ## Known limitations
 
-- **Turn-taking is per-process.** `RedisEventBus` and `LibSQLMultiplayerStore` make events and storage shared, but `TurnController` is not. Two people posting to different instances at the same moment start two concurrent agent runs into one session, and `interrupt()` only aborts a run in the process that receives it. Use session affinity at the load balancer.
-- **Nothing drives approval expiry for you.** `sweepExpiredApprovals()` resolves what is past its deadline; wire it into a scheduler you already run. Gates that stay open for hours or days across deploys belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
+- **Turn-taking is per-process unless you give it a lease.** `TurnController` enforces one run at a time with an in-memory flag, so without a `TurnLease` two people posting to different instances at the same moment start two concurrent runs into one session. Pass `RedisTurnLease`, or use session affinity at the load balancer. (`interrupt()` is *not* in this category — it has crossed instances since `0.3.0`, with no lease needed.)
+- **Nothing drives approval expiry for you.** `sweepExpiredApprovals()` resolves what is past its deadline; wire it into a scheduler you already run. This matters more with workflow gates: an expired gate has to wake its suspended run, and nothing else will. Gates that stay open for hours or days across deploys belong in a durable-execution backend (Temporal, Inngest, Restate, Durable Objects), with this package handling the human-facing half.
 - **No CRDT layer.** Live cursors and shared document editing are researched, not scheduled.
 - **No independent evaluation exists for any of this.** Multiplayer agents are new enough that the failure modes are still being discovered in production, not in benchmarks.
 
@@ -267,7 +295,7 @@ Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler
 
 `0.3.0` shipped the correctness work: tested and authorized HTTP surface, durable storage with a conformance suite, a distributed event bus and turn lease, backpressure, and a logger seam.
 
-**`0.4.0` is about integration.** Channel participants (above) have landed; approval gates as real workflow steps are next. The [plan](./docs/roadmap/0.4.0-integration.md) is grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items.
+**`0.4.0` is about integration, and both items have landed:** channel participants (above), and approval gates as real Mastra workflow steps. The [plan](./docs/roadmap/0.4.0-integration.md) was grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items — and the gates were then built and tested against a *published* `@mastra/core`, not the monorepo version the research read.
 
 The board — including what is deliberately out of scope, and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 

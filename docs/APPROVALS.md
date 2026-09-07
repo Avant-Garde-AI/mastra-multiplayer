@@ -113,7 +113,7 @@ a signature on one specific call, not a permission that lingers.
 
 ## The tool pattern
 
-The shape used in [`examples/approval-gate/refund-tool.ts`](../examples/approval-gate/refund-tool.ts):
+The shape used in [`examples/approval-gate/refund-tool-polling.ts`](../examples/approval-gate/refund-tool-polling.ts):
 
 ```ts
 execute: async ({ context, runtimeContext }) => {
@@ -144,22 +144,110 @@ model that can name the requester can name someone else and defeat
 
 ## Waiting for a decision
 
-The decision arrives over HTTP from whoever votes, so the tool has to wait for
+The decision arrives over HTTP from whoever votes, so the gate has to wait for
 something outside its own call stack. Options, worst to best:
 
-1. **Poll `store.getApproval()`.** What the example does. Simple, works, burns
-   a run for the duration.
+1. **Poll `store.getApproval()`.** Simple, works, burns an agent run for the
+   duration and loses the wait on restart.
 2. **Subscribe to the bus** for `approval.resolved` on that session. Better,
    still holds the process.
-3. **Suspend a workflow step** with Mastra's `suspend()`/`resume()`. The right
-   answer, and [R6](./ROADMAP.md#r6--workflow-step-approval-gates) builds it —
-   both the step *and* the resumer that wakes it when a vote lands, which is the
-   half that is easy to forget. See the
-   [plan](./roadmap/0.4.0-integration.md#r6--workflow-step-approval-gates).
+3. **Suspend a workflow step.** The right answer, and what
+   [`mastra-multiplayer/workflows`](./API.md#workflows) provides. The waiting
+   lives in Mastra's durable snapshot rather than in a promise, so nothing is
+   held open and a deploy mid-decision costs nothing.
 
-For a gate that needs to stay open for hours or days across deploys, none of
-these is enough — put it in a durable execution engine (Temporal, Inngest,
-Restate, Durable Objects) and use this package for the human-facing half.
+Options 1 and 2 remain reasonable for an agent with no workflows to hang a gate
+on — see [`refund-tool-polling.ts`](../examples/approval-gate/refund-tool-polling.ts).
+The governance is identical in all three: same policies, same binding, same
+ledger.
+
+### Gates as workflow steps
+
+```ts
+import { createStep } from "@mastra/core/workflows";
+import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+
+const gate = createStep(
+  approvalStep<typeof refundArgs, typeof refundArgs, RefundArgs>(multiplayer, {
+    id: "approve-refund",
+    inputSchema: refundArgs,
+    outputSchema: refundArgs,
+    workflowId: "refund",
+    toolName: "refund-order",
+    policy: fourEyes(),
+    sessionId: ({ inputData }) => inputData.sessionId,
+    requestedBy: ({ inputData }) => inputData.requestedBy,
+    summary: ({ inputData }) => `Refund $${inputData.amountCents / 100}`,
+  }),
+);
+```
+
+The step runs twice. The first time it opens a request and calls `suspend()`.
+The second time — after a resume — it re-reads the request and either passes
+`inputData` through (approved) or calls `bail()` (denied, cancelled, expired).
+
+**A denial bails; it does not throw.** A refused refund is a completed run that
+did not refund anything. Throwing would file every routine refusal as an error
+to triage.
+
+**A binding mismatch throws.** That is not a decision — it means the run is
+about to perform something nobody approved, and the run should fail loudly. See
+[argument binding](#argument-binding).
+
+**It returns `createStep` parameters, not a step.** Building a step means
+converting schemas, which is `@mastra/core`'s job. Wrapping the result yourself
+is what keeps the peer dependency optional.
+
+### The resumer is the other half
+
+A step that suspends and a vote that resolves an approval are two halves of a
+bridge. Votes arrive over this package's HTTP surface; workflows continue
+through `run.resume()`. Without something joining them, every gate suspends for
+ever.
+
+```ts
+const resumer = approvalResumer(multiplayer, mastra);
+const stop = await resumer.start();
+```
+
+`start()` does two things, and both are load-bearing:
+
+- **Listens** for decisions made in this process, which covers every ordinary
+  vote and every expiry sweep, immediately.
+- **Reconciles** once, sweeping the store for gates decided while nothing was
+  listening — a vote taken on an instance that then restarted, a decision made
+  during a deploy.
+
+Neither alone is enough. Without the listener a human waits for the next sweep;
+without the sweep a decision made during a restart strands the run for ever,
+with the ledger insisting it was approved. Call `reconcile()` again from the
+same timer that sweeps expiries.
+
+**Expiry resumes too.** An expired gate wakes its run exactly like a denied one,
+or timing out becomes the single case that hangs. That is why
+[sweeping](#expiry-needs-something-to-drive-it) matters more once gates are
+workflow steps.
+
+**Behind more than one instance, pass a `lease`.** Two instances that both hear
+a decision will both try to resume. Mastra refuses the second — it will not
+resume a run that is not suspended — so the failure is noisy rather than
+dangerous, but a `RedisTurnLease` turns it into a clean skip:
+
+```ts
+approvalResumer(multiplayer, mastra, { lease: new RedisTurnLease({ client }) });
+```
+
+The lease is keyed per approval, not per session, so two gates in one session
+resume independently and a resume never blocks an agent turn.
+
+**A resume that fails is loud and retried.** An unregistered workflow, a run
+that has vanished, a resume the engine rejects — each is logged and left
+unmarked, so the next sweep tries again. A gate that resolved in the ledger and
+never resumed looks fine from the outside and is not.
+
+For a gate that needs to stay open for weeks, or to survive the workflow store
+itself, put it in a durable execution engine (Temporal, Inngest, Restate,
+Durable Objects) and use this package for the human-facing half.
 
 ## Expiry needs something to drive it
 

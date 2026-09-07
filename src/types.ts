@@ -187,9 +187,28 @@ export interface ApprovalRequest {
   createdAt: number;
   expiresAt: number;
   resolvedAt?: number;
-  /** Mastra workflow run this gate is suspended inside, when applicable. */
+  /**
+   * The suspended Mastra workflow step this gate is holding open, when there
+   * is one. All three are needed to find it again: `mastra.getWorkflow(
+   * workflowId).createRun({ runId })` and then `resume({ step: stepId })`.
+   *
+   * `runId` and `stepId` shipped in `0.1.0` unused; `workflowId` joined them in
+   * `0.4.0`, when something finally tried to resume a run and found a run id
+   * with no registry key to look it up in.
+   */
+  workflowId?: string;
   runId?: string;
   stepId?: string;
+  /**
+   * When a resumer last established that this gate's step no longer needs
+   * waking — either because it resumed the run, or because the run had already
+   * moved on.
+   *
+   * It exists so the reconciling sweep stays cheap. Without it every approval
+   * ever resolved is re-checked against the workflow store on every sweep, for
+   * ever; with it the sweep only looks at gates that might still be stuck.
+   */
+  resumedAt?: number;
 }
 
 /* ------------------------------------------------------------------ */
