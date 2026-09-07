@@ -129,6 +129,23 @@ A single-user chat loop assumes one message, one turn. `TurnController` gives yo
 
 `preempt` and `interrupt()` both fire an `AbortSignal` that is passed through to `agent.stream`, so tools can honour cancellation.
 
+## Channels: one session, many surfaces
+
+A session can span your web UI and a Slack thread. Everyone lands in the same roster, is labelled by name in the prompt the agent sees, and can vote on an approval:
+
+```ts
+import { channelBridge } from "mastra-multiplayer/channels";
+
+const bridge = channelBridge(multiplayer, {
+  resolveSession: ({ threadId }) => sessionForThread(threadId),
+  role: ({ actor }) => (approvers.has(actor.userId) ? "approver" : "editor"),
+});
+
+await bridge.receive({ surface: "slack", actor, threadId, text });
+```
+
+No chat SDK involved — Mastra's `@chat-adapter/*` packages belong to your agent, and this is the mapping between its `actor` and a `Participant`. Bots are excluded by default, because one appearing in the roster could satisfy a four-eyes gate. [Details](./docs/CHANNELS.md).
+
 ## Attribution
 
 A model handed a shared transcript with no speaker labels reads it as one person contradicting themselves. `labelBatch` prefixes each message with its author, and `rosterPrompt` appends a system-prompt fragment describing the room:
@@ -222,6 +239,7 @@ Full docs live in [`docs/`](./docs):
 [HTTP & SSE](./docs/HTTP-API.md) ·
 [approvals](./docs/APPROVALS.md) ·
 [concurrency](./docs/CONCURRENCY.md) ·
+[channels](./docs/CHANNELS.md) ·
 [storage](./docs/STORAGE.md) ·
 [security](./docs/SECURITY.md) ·
 [decision records](./docs/decisions) ·
@@ -249,7 +267,7 @@ Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler
 
 `0.3.0` shipped the correctness work: tested and authorized HTTP surface, durable storage with a conformance suite, a distributed event bus and turn lease, backpressure, and a logger seam.
 
-**`0.4.0` is about integration** — mapping channel identities onto participants, and approval gates as real workflow steps rather than a polling loop. The [detailed plan](./docs/roadmap/0.4.0-integration.md) is grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items.
+**`0.4.0` is about integration.** Channel participants (above) have landed; approval gates as real workflow steps are next. The [plan](./docs/roadmap/0.4.0-integration.md) is grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items.
 
 The board — including what is deliberately out of scope, and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 

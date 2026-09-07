@@ -3,6 +3,26 @@
 All notable changes to this package. Dates are the day the work landed on
 `main`.
 
+## Unreleased
+
+### Channels
+- `mastra-multiplayer/channels` maps a Mastra channel actor onto a
+  `Participant`, so a session can span a web UI and a Slack thread with one
+  roster (`R7`). `channelParticipant` is the pure mapping; `ChannelBridge`
+  joins the sender and forwards the message.
+
+  No chat SDK dependency — Mastra's `@chat-adapter/*` packages belong to the
+  host's agent. Ids are prefixed with the surface (an unprefixed collision
+  between platforms would merge two people into one participant, silently
+  weakening four-eyes), bots are excluded by default including
+  `isBot: "unknown"`, and joining happens on arrival and on change rather than
+  per message.
+
+- `ParticipantSurface` now accepts any string, and its named members match the
+  platforms Mastra actually ships adapters for. It previously named `linear`,
+  which has no adapter, and omitted `telegram`, `whatsapp` and `imessage`.
+  Widening only — existing values still typecheck.
+
 ## 0.3.0 — 2026-09-06
 
 **The first published release.** `0.1.0` and `0.2.0` below are development
