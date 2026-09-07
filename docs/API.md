@@ -73,7 +73,8 @@ over inheritance, so each piece is usable on its own.
 | `join(sessionId, participant)` | → `Participant[]`. Publishes `participant.joined` and records a first heartbeat. |
 | `leave(sessionId, participantId)` | Clears presence, removes from roster, audits. |
 | `send({ sessionId, participantId, text, addressedToAgent?, metadata? })` | Broadcasts to the room, then submits to `TurnController` unless `addressedToAgent` is false. |
-| `interrupt(sessionId, participantId)` | Aborts the run and clears the queue. Not role-gated. |
+| `interrupt(sessionId, participantId)` | Aborts the run and clears the queue, on whichever instance owns it. Not role-gated. |
+| `sweepExpiredApprovals()` | → resolved `ApprovalRequest[]` across every session. Call from your own scheduler. |
 
 What a turn does, in order: label the batch by author, append `rosterPrompt()`
 to the agent's instructions, call `agent.stream`, republish each delta as
@@ -81,8 +82,12 @@ to the agent's instructions, call `agent.stream`, republish each delta as
 
 ## Approvals
 
-`ApprovalGate` — `request`, `vote`, `refresh`, `assertBinding`, `pending`.
-Reached as `multiplayer.approvals`.
+`ApprovalGate` — `request`, `vote`, `refresh`, `assertBinding`, `pending`,
+`sweepExpired`. Reached as `multiplayer.approvals`.
+
+`sweepExpired(sessionId)` resolves every request past its deadline, returning
+those that changed. `multiplayer.sweepExpiredApprovals()` does it across every
+session. Nothing fires on its own — call one from your own scheduler.
 
 `ApprovalError` carries `code`: `not_found` · `not_eligible` ·
 `already_resolved` · `binding_mismatch`.
@@ -209,8 +214,8 @@ Event shapes: [HTTP-API](./HTTP-API.md#event-frames).
 
 ## Server
 
-`multiplayerRoutes(session, { basePath?, authenticate, authorize? })` →
-`RouteDefinition[]`.
+`multiplayerRoutes(session, { basePath?, authenticate, authorize?,
+streamHighWaterMark?, logger? })` → `RouteDefinition[]`.
 
 `authenticate` establishes identity (401 on null); `authorize` establishes
 access (403 on false), defaulting to roster membership with `join` exempted.

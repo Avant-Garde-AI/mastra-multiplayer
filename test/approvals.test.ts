@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ApprovalGate, bindingHashFor, fourEyes, quorumOf } from "../src/approvals/index.js";
+import { createMultiplayer } from "../src/session.js";
 import { EventBus } from "../src/bus/event-bus.js";
 import { InMemoryMultiplayerStore } from "../src/storage/index.js";
 import type { Participant } from "../src/types.js";
@@ -299,5 +300,161 @@ describe("policy persistence", () => {
     const afterOne = await restarted.vote(request.id, "bob", "approve");
 
     expect(afterOne.status).toBe("pending");
+  });
+});
+
+/**
+ * Expiry is evaluated against the clock, but nothing fires on its own. A gate
+ * that expires at 3am sits `pending` until someone votes or refreshes it, so
+ * "silence is not consent" only holds if something does the asking.
+ */
+describe("expiry sweep", () => {
+  const expired = (gate: ApprovalGate, requestedBy = "alice") =>
+    gate.request({
+      sessionId: "s1",
+      requestedBy,
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      // Already past its deadline the moment it is created.
+      policy: quorumOf(2, { expiresAfterMs: -1 }),
+    });
+
+  it("resolves a request whose deadline has passed", async () => {
+    const { gate } = await setup();
+    const request = await expired(gate);
+
+    const resolved = await gate.sweepExpired("s1");
+
+    expect(resolved.map((r) => r.id)).toEqual([request.id]);
+    expect(resolved[0]?.status).toBe("expired");
+  });
+
+  it("leaves a request still inside its window alone", async () => {
+    const { gate } = await setup();
+    await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: quorumOf(2, { expiresAfterMs: 60_000 }),
+    });
+
+    expect(await gate.sweepExpired("s1")).toEqual([]);
+    expect(await gate.pending("s1")).toHaveLength(1);
+  });
+
+  it("records the deadline as the resolution time, not when the sweep ran", async () => {
+    // The whole point of sweeping. A 3am expiry recorded at 9am is the wrong
+    // answer to "when was this decided", and the ledger is what answers it.
+    const { gate } = await setup();
+    const request = await expired(gate);
+
+    const [resolved] = await gate.sweepExpired("s1");
+
+    expect(resolved?.resolvedAt).toBe(request.expiresAt);
+  });
+
+  it("honours onExpiry: approve", async () => {
+    const { gate } = await setup();
+    await gate.request({
+      sessionId: "s1",
+      requestedBy: "alice",
+      toolName: "refund",
+      toolArgs: {},
+      summary: "Refund",
+      policy: quorumOf(2, { expiresAfterMs: -1, onExpiry: "approve" }),
+    });
+
+    const [resolved] = await gate.sweepExpired("s1");
+    expect(resolved?.status).toBe("approved");
+  });
+
+  it("is idempotent — a second sweep resolves nothing", async () => {
+    const { gate } = await setup();
+    await expired(gate);
+
+    expect(await gate.sweepExpired("s1")).toHaveLength(1);
+    expect(await gate.sweepExpired("s1")).toEqual([]);
+  });
+
+  it("announces each resolution to the room", async () => {
+    const { bus, gate } = await setup();
+    const seen: string[] = [];
+    bus.subscribe("s1", (event) => seen.push(event.type));
+
+    await expired(gate);
+    seen.length = 0;
+    await gate.sweepExpired("s1");
+
+    expect(seen).toEqual(["approval.resolved"]);
+  });
+
+  it("writes the resolution to the audit ledger", async () => {
+    const { store, gate } = await setup();
+    await expired(gate);
+    await gate.sweepExpired("s1");
+
+    const audit = await store.listAudit("s1");
+    expect(audit.some((e) => e.action === "approval.resolved")).toBe(true);
+  });
+
+  it("sweeps every session when driven from the session object", async () => {
+    const multiplayer = createMultiplayer({
+      agent: {
+        id: "a",
+        async stream() {
+          return { textStream: (async function* () { yield "x"; })() };
+        },
+      },
+    });
+    const one = await multiplayer.createSession({ threadId: "t1" });
+    const two = await multiplayer.createSession({ threadId: "t2" });
+
+    for (const session of [one, two]) {
+      await multiplayer.join(session.id, person("alice"));
+      await multiplayer.approvals.request({
+        sessionId: session.id,
+        requestedBy: "alice",
+        toolName: "refund",
+        toolArgs: {},
+        summary: "Refund",
+        policy: quorumOf(2, { expiresAfterMs: -1 }),
+      });
+    }
+
+    const resolved = await multiplayer.sweepExpiredApprovals();
+    expect(resolved).toHaveLength(2);
+    expect(new Set(resolved.map((r) => r.sessionId))).toEqual(
+      new Set([one.id, two.id]),
+    );
+  });
+
+  it("keeps sweeping when one request cannot be refreshed", async () => {
+    // One broken record must not strand every other expired gate in the
+    // session — a sweep that stops on the first error resolves nothing.
+    const { store, bus } = await setup();
+    const logged: string[] = [];
+    const gate = new ApprovalGate(store, bus, { name: "default" }, {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: (message) => logged.push(message),
+    });
+
+    const bad = await expired(gate);
+    const good = await expired(gate, "bob");
+
+    const original = store.getApproval.bind(store);
+    store.getApproval = async (id) => {
+      if (id === bad.id) throw new Error("storage blip");
+      return original(id);
+    };
+
+    const resolved = await gate.sweepExpired("s1");
+
+    expect(resolved.map((r) => r.id)).toEqual([good.id]);
+    expect(logged.some((m) => m.includes("could not refresh"))).toBe(true);
   });
 });

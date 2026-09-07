@@ -9,6 +9,7 @@ import { PresenceManager, type PresenceOptions } from "./presence/index.js";
 import { InMemoryMultiplayerStore, type MultiplayerStore } from "./storage/index.js";
 import { consoleLogger, safeLogger, type Logger } from "./internal/logger.js";
 import type {
+  ApprovalRequest,
   AuditAction,
   InboundMessage,
   Participant,
@@ -201,6 +202,22 @@ export class MultiplayerSession {
       triggeredBy: participantId,
     });
     await this.audit(sessionId, "agent.run.interrupted", participantId, {});
+  }
+
+  /**
+   * Resolves expired approvals across every session.
+   *
+   * Convenience over `approvals.sweepExpired(sessionId)` for hosts that do not
+   * track which sessions are live. It reads the session list on each call, so
+   * on a large deployment prefer sweeping the sessions you know are active.
+   */
+  async sweepExpiredApprovals(): Promise<ApprovalRequest[]> {
+    const sessions = await this.store.listSessions();
+    const resolved: ApprovalRequest[] = [];
+    for (const session of sessions) {
+      resolved.push(...(await this.approvals.sweepExpired(session.id)));
+    }
+    return resolved;
   }
 
   private async runTurn(turn: Turn): Promise<void> {

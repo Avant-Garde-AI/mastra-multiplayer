@@ -158,15 +158,40 @@ For a gate that needs to stay open for hours or days across deploys, none of
 these is enough — put it in a durable execution engine (Temporal, Inngest,
 Restate, Durable Objects) and use this package for the human-facing half.
 
-## Expiry is lazy
+## Expiry needs something to drive it
 
-`evaluate()` compares against the clock, but nothing fires on its own. A request
-expires when someone next calls `vote()` or `refresh()` on it.
+`evaluate()` compares against the clock, but nothing fires on its own. Left
+alone, a gate that expires at 3am sits `pending` in the store until someone
+votes or refreshes it — so "silence is not consent" only holds if something does
+the asking.
 
-Practically: a gate that expires at 3am is still `pending` in the store at 8am
-and resolves when the first person opens the page. Call `refresh()` from your own
-scheduler if the resolution time needs to be accurate. Making this less
-awkward is [R8](./ROADMAP.md#r8--durable-expiry).
+Drive it from whatever scheduler your application already runs:
+
+```ts
+// Per session, when you know which are live.
+const resolved = await multiplayer.approvals.sweepExpired(sessionId);
+
+// Or across every session, for hosts that do not track that.
+const resolved = await multiplayer.sweepExpiredApprovals();
+```
+
+Each returns the requests that resolved, and each publishes
+`approval.resolved` and writes to the audit ledger exactly as a vote would. It
+is idempotent — a second sweep resolves nothing — and one unreadable record does
+not strand the rest of the session.
+
+**`resolvedAt` is the deadline, not the sweep time.** A request that expired at
+3am records 3am even if nothing noticed until 9am; the ledger's job is to answer
+*when was this decided*, and the answer is when the window closed. The same
+holds for a vote that lands after expiry.
+
+### Why no timer in here
+
+The right cadence depends on how tight your approval windows are, and a library
+that owns a scheduler owns a shutdown story, a leader-election story on more
+than one instance, and a surprise for anyone who imports it in a script. Sweep
+every minute, or every hour, or on each page load — it is your call, and it is
+one line.
 
 ## Policies are stored on the request
 

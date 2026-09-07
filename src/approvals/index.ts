@@ -161,7 +161,11 @@ export class ApprovalGate {
     const status = evaluate(policy, request);
     const resolved = status !== "pending";
     request.status = status;
-    if (resolved) request.resolvedAt = Date.now();
+    if (resolved) {
+      // A vote that lands after expiry resolves the request as of the expiry,
+      // not as of the late vote.
+      request.resolvedAt = status === "expired" ? request.expiresAt : Date.now();
+    }
 
     await this.store.saveApproval(request);
     await this.audit(request.sessionId, "approval.voted", participantId, {
@@ -199,7 +203,11 @@ export class ApprovalGate {
     if (status === "pending") return request;
 
     request.status = status;
-    request.resolvedAt = Date.now();
+    // The request resolved when it expired, not when a sweep got round to
+    // noticing. Recording `Date.now()` would put a 3am expiry in the ledger at
+    // whatever time someone next looked, which is the wrong answer to "when was
+    // this decided".
+    request.resolvedAt = request.expiresAt;
     await this.store.saveApproval(request);
     await this.bus.publish({
       type: "approval.resolved",
@@ -229,6 +237,42 @@ export class ApprovalGate {
 
   async pending(sessionId: SessionId): Promise<ApprovalRequest[]> {
     return this.store.listApprovals(sessionId, "pending");
+  }
+
+  /**
+   * Resolves every request in a session whose deadline has passed.
+   *
+   * Expiry is evaluated against the clock, but nothing fires on its own — a
+   * gate that expires at 3am sits `pending` in the store until someone votes or
+   * refreshes it. Call this from whatever scheduler your application already
+   * runs, so a deny-on-expiry is a decision made at the deadline rather than at
+   * the next page load.
+   *
+   * There is deliberately no timer inside this package: the right cadence
+   * depends on how tight your approval windows are, and a library that owns a
+   * scheduler owns a shutdown story too.
+   *
+   * Returns the requests that resolved, so a caller can log or react.
+   */
+  async sweepExpired(sessionId: SessionId): Promise<ApprovalRequest[]> {
+    const pending = await this.store.listApprovals(sessionId, "pending");
+    const resolved: ApprovalRequest[] = [];
+
+    for (const request of pending) {
+      // `refresh` re-reads and re-evaluates; it is a no-op for anything still
+      // inside its window.
+      const refreshed = await this.refresh(request.id).catch((error) => {
+        this.logger.error("could not refresh an approval during the sweep", {
+          approvalId: request.id,
+          sessionId,
+          error,
+        });
+        return null;
+      });
+      if (refreshed && refreshed.status !== "pending") resolved.push(refreshed);
+    }
+
+    return resolved;
   }
 
   /**
