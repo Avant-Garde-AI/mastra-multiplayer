@@ -152,7 +152,10 @@ something outside its own call stack. Options, worst to best:
 2. **Subscribe to the bus** for `approval.resolved` on that session. Better,
    still holds the process.
 3. **Suspend a workflow step** with Mastra's `suspend()`/`resume()`. The right
-   answer, and a factory for it is [R6](./ROADMAP.md#r6--workflow-step-factory-for-gates).
+   answer, and [R6](./ROADMAP.md#r6--workflow-step-approval-gates) builds it —
+   both the step *and* the resumer that wakes it when a vote lands, which is the
+   half that is easy to forget. See the
+   [plan](./roadmap/0.4.0-integration.md#r6--workflow-step-approval-gates).
 
 For a gate that needs to stay open for hours or days across deploys, none of
 these is enough — put it in a durable execution engine (Temporal, Inngest,
