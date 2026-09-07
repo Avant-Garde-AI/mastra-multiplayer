@@ -1,39 +1,17 @@
 # Changelog
 
-## 0.1.0 — unreleased
+All notable changes to this package. Dates are the day the work landed on
+`main`.
 
-Initial scaffold.
+## 0.3.0 — 2026-09-06
 
-### Added
-- `MultiplayerSession` — shared session bound to a Mastra thread, with a
-  participant roster and audit ledger.
-- `PresenceManager` — heartbeat-based presence with idle and drop windows,
-  typing state, and background sweeping.
-- `ApprovalGate` + policy engine — four-eyes, n-of-m quorum, role gating,
-  argument-bound approvals, deny-is-final, deny-on-expiry.
-- `TurnController` — `queue`, `debounce`, `batch`, `skip`, `preempt` modes for
-  concurrent human input, with `AbortSignal` propagation.
-- `EventBus` — sequenced per-session pub/sub with a bounded replay buffer.
-- Attribution helpers — speaker labelling and roster system-prompt injection.
-- `multiplayerRoutes()` — SSE stream plus join/leave/presence/messages/
-  interrupt/approvals/audit endpoints for `registerApiRoute`.
-- `MultiplayerClient` and `useMultiplayerSession` — browser client with
-  reconnect-from-sequence, and a headless React hook.
-- `InMemoryMultiplayerStore` for development and tests.
+**The first published release.** `0.1.0` and `0.2.0` below are development
+milestones that were never put on npm; they are kept because the roadmap,
+commits and decision records refer to them by name, and because the breaking
+changes between them are what an early adopter reading this needs.
 
-### Fixed
-- A closed SSE stream no longer publishes `participant.left`. A stream closes on
-  every reconnect and tab switch, which was evicting people from everyone else's
-  roster while they were still in the session. `PresenceManager.disconnected()`
-  clears presence and leaves the roster alone; `leave()` is unchanged.
-- `GET /sessions/:id/state` and `MultiplayerClient.hydrate()` — a client opening
-  a session that had been running longer than the replay buffer rendered an
-  empty room, with open approval gates invisible. `MultiplayerClient.start()`
-  sequences join → hydrate → connect.
-- Policy resolution ignores explicitly-`undefined` overrides. Building a policy
-  from optional config previously let `undefined` replace a default: `quorum`
-  made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
-  `allowedRoles` threw in `canVote`.
+Theme: **operability** — behaving correctly with more than one instance
+running, and running unattended.
 
 ### Concurrency
 - **`interrupt()` now stops a run owned by another instance** (`R14`). It
@@ -59,7 +37,7 @@ Initial scaffold.
   else closes the stream, so the client reconnects and replays from
   `Last-Event-ID`.
 
-### Approvals (expiry)
+### Approvals
 - `approvals.sweepExpired(sessionId)` and `sweepExpiredApprovals()` resolve
   requests past their deadline (`R8`). Nothing fires on its own; call one from
   your own scheduler. No timer ships in this package.
@@ -72,6 +50,11 @@ Initial scaffold.
   bus, presence manager, approval gate, and turn controller. `consoleLogger` is
   the default, `silentLogger` discards. Every `console.error` in `src/` is gone,
   and a host logger that throws cannot break the caller.
+
+## 0.2.0 — 2026-09-06
+
+Theme: **surviving a second process.** Everything before this assumed one Node
+process holding all state in memory.
 
 ### Event bus
 - `RedisEventBus` (`mastra-multiplayer/bus/redis`) — a shared bus for
@@ -121,7 +104,7 @@ Initial scaffold.
   `ApprovalPolicy` and `ResolvedPolicy` moved to `types.ts` and are re-exported
   from `approvals/policy.js`; imports are unaffected.
 
-### Fixed (approvals)
+### Fixed
 - `canVote` consulted `allowedParticipants` on the caller's raw policy rather
   than the resolved one. Harmless while the raw object was the input; a live
   bug once the resolved policy became it.
@@ -163,11 +146,63 @@ Initial scaffold.
 - `CHANGELOG.md` is now published (`files`).
 - Removed `.npmignore`, which npm ignores when `files` is present.
 
-### Known gaps
-- Nothing drives approval expiry for you — wire `sweepExpiredApprovals()` into
-  a scheduler you already run.
+## 0.1.0 — 2026-09-06 (unpublished)
+
+The initial scaffold, plus the defects found reviewing it.
+
+### Added
+- `MultiplayerSession` — shared session bound to a Mastra thread, with a
+  participant roster and audit ledger.
+- `PresenceManager` — heartbeat-based presence with idle and drop windows,
+  typing state, and background sweeping.
+- `ApprovalGate` + policy engine — four-eyes, n-of-m quorum, role gating,
+  argument-bound approvals, deny-is-final, deny-on-expiry.
+- `TurnController` — `queue`, `debounce`, `batch`, `skip`, `preempt` modes for
+  concurrent human input, with `AbortSignal` propagation.
+- `EventBus` — sequenced per-session pub/sub with a bounded replay buffer.
+- Attribution helpers — speaker labelling and roster system-prompt injection.
+- `multiplayerRoutes()` — SSE stream plus join/leave/presence/messages/
+  interrupt/approvals/audit endpoints for `registerApiRoute`.
+- `MultiplayerClient` and `useMultiplayerSession` — browser client with
+  reconnect-from-sequence, and a headless React hook.
+- `InMemoryMultiplayerStore` for development and tests.
+
+### Fixed
+- A closed SSE stream no longer publishes `participant.left`. A stream closes on
+  every reconnect and tab switch, which was evicting people from everyone else's
+  roster while they were still in the session. `PresenceManager.disconnected()`
+  clears presence and leaves the roster alone; `leave()` is unchanged.
+- `GET /sessions/:id/state` and `MultiplayerClient.hydrate()` — a client opening
+  a session that had been running longer than the replay buffer rendered an
+  empty room, with open approval gates invisible. `MultiplayerClient.start()`
+  sequences join → hydrate → connect.
+- Policy resolution ignores explicitly-`undefined` overrides. Building a policy
+  from optional config previously let `undefined` replace a default: `quorum`
+  made the gate unapprovable, `denyIsFinal` stopped a deny resolving it, and
+  `allowedRoles` threw in `canVote`.
+
+## Upgrading
+
+Nothing published before `0.3.0`, so there is nothing to migrate from. The
+breaking changes recorded above are between development milestones, and are
+listed for anyone tracking `main`:
+
+| Change | Since | What to do |
+| --- | --- | --- |
+| `publish`, `replay`, `currentSeq`, `clear` are async | `0.2.0` | `await` them. Use `subscribeFrom` in place of replay-then-subscribe. |
+| `ApprovalRequest.policyName` removed | `0.2.0` | Use `policy.name`. |
+| Custom `MultiplayerStore` must round-trip `policy` | `0.2.0` | Store it verbatim; run the [conformance suite](./docs/STORAGE.md#the-conformance-suite). |
+| Store reads of an unknown session return empty, writes reject | `0.2.0` | Match it, or run the conformance suite and let it tell you. |
+| An unknown session returns `403`, not `404` | `0.2.0` | Expect `403` — authorization runs before the session is loaded. |
+
+## Known gaps
+
 - Turn-taking is per-process unless you configure a `TurnLease`. Without one,
   concurrent posts to different instances start two runs into one session.
+- Nothing drives approval expiry for you — wire `sweepExpiredApprovals()` into
+  a scheduler you already run.
 - No CRDT/co-editing layer.
+- No independent evaluation of any of this. Multiplayer agents are new enough
+  that the failure modes are still being found in production, not in benchmarks.
 
 See [docs/ROADMAP.md](./docs/ROADMAP.md).

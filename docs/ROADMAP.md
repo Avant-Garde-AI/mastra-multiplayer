@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.1.0` · `0.2.0` and Phase 4 complete
+Last gardened: 2026-09-06 · against `0.3.0` · `0.2.0` and Phase 4 shipped
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -483,30 +483,29 @@ Kept here so the questions stay answered.
 | WebSocket transport | Rejected with reasoning in [ADR 0002](./decisions/0002-sse-over-websockets.md). Revisit only if R11 lands and needs a bidirectional channel anyway. |
 | Publishing under `@mastra/` | The scope belongs to the Mastra org. Community packages use an unscoped prefix. |
 
-## Recently shipped
+## Released
 
-### `0.1.0` (unreleased)
+### `0.3.0` — the first published release
 
-The initial scaffold: `MultiplayerSession`, `PresenceManager`, `ApprovalGate`
-and the policy engine, `TurnController`, `EventBus`, attribution helpers,
-`multiplayerRoutes`, `MultiplayerClient` and `useMultiplayerSession`,
-`InMemoryMultiplayerStore`. See the [changelog](../CHANGELOG.md).
+Phase 4, operability: cross-instance turn coordination (`R14`), a logger seam
+(`R10`), SSE backpressure (`R9`), and driven approval expiry (`R8`).
 
-Added during the launch review ([findings](./reviews/2026-09-06-launch-review.md)):
+### `0.2.0` — surviving a second process (unpublished)
 
-- `GET /sessions/:id/state` and `MultiplayerClient.hydrate()` — a client opening
-  an already-running session used to render an empty room.
-- `PresenceManager.disconnected()` — a closed SSE stream no longer evicts the
-  person from everyone else's roster.
-- `mergePolicy()` — an explicitly-`undefined` policy override no longer
-  silently replaces a default.
-- `npm run check` (typecheck + tests + doc links) and
-  `scripts/check-doc-links.mjs`, so a moved page or renamed heading fails
-  loudly instead of rotting.
-- Package metadata (`repository`, `homepage`, `bugs`, `publishConfig`, the
-  `"./package.json"` export, `CHANGELOG.md` in `files`); removed the inert
-  `.npmignore`.
-- These docs.
+CI (`R13`), HTTP surface tests (`R4`), session authorization (`R5`), persisted
+approval policies (`R2`), a durable store and conformance suite (`R3`), and a
+Redis-backed bus (`R1`).
+
+### `0.1.0` — the initial scaffold (unpublished)
+
+`MultiplayerSession`, `PresenceManager`, `ApprovalGate` and the policy engine,
+`TurnController`, `EventBus`, attribution helpers, `multiplayerRoutes`,
+`MultiplayerClient` and `useMultiplayerSession`, `InMemoryMultiplayerStore` —
+plus the three defects found reviewing it
+([findings](./reviews/2026-09-06-launch-review.md)) and these docs.
+
+Full detail, including every breaking change between milestones, is in the
+[changelog](../CHANGELOG.md).
 
 ## How this roadmap is maintained
 

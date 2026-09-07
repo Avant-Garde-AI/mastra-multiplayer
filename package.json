@@ -1,6 +1,6 @@
 {
   "name": "mastra-multiplayer",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Multiplayer primitives for Mastra agents: presence, multi-approver gates, and a shared-session event bus for many humans in one agent session.",
   "keywords": [
     "mastra",
@@ -80,7 +80,8 @@
     "test:watch": "vitest",
     "docs:check": "node scripts/check-doc-links.mjs",
     "lint": "tsc --noEmit",
-    "check": "npm run typecheck && npm run test && npm run docs:check"
+    "check": "npm run typecheck && npm run test && npm run docs:check",
+    "prepublishOnly": "npm run check && npm run build && node scripts/check-exports.mjs"
   },
   "peerDependencies": {
     "@libsql/client": ">=0.14",

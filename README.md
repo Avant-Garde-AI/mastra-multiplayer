@@ -6,7 +6,7 @@ Mastra already handles the channel side of this well — the Signal API gives yo
 
 That is what this package is.
 
-> Status: `0.1.0`, pre-release. The API will change. Not affiliated with the Mastra team.
+> Status: `0.3.0`, the first published release. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
 
 ## What "multiplayer" means here
 
