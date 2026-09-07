@@ -490,14 +490,21 @@ export class ApprovalResumer {
     }
   }
 
+  /**
+   * The lease is deliberately not renewed while this runs.
+   *
+   * `run.resume()` awaits the rest of the workflow, which can outlast any
+   * sensible TTL — a refund, a deployment. Renewing would mean a timer and a
+   * shutdown story for a guarantee that is not needed here: once the run leaves
+   * `suspended`, a second instance's own check finds nothing to do. The lease
+   * covers the window between reading that state and acting on it, which is
+   * short; the workflow store covers the rest.
+   */
   private async resumeUnderLease(
-    request: ApprovalRequest,
+    request: SuspendedOnAStep,
     result: (outcome: ResumeOutcome, reason: string) => ResumeResult,
   ): Promise<ResumeResult> {
-    const { workflowId, runId, stepId } = request as Required<
-      Pick<ApprovalRequest, "workflowId" | "runId" | "stepId">
-    > &
-      ApprovalRequest;
+    const { workflowId, runId, stepId } = request;
 
     let workflow: WorkflowLike | undefined;
     try {
@@ -614,10 +621,11 @@ export function approvalResumer(
   return new ApprovalResumer(host, workflows, options);
 }
 
-function isSuspendedOnAStep(
-  request: ApprovalRequest,
-): request is ApprovalRequest &
-  Required<Pick<ApprovalRequest, "workflowId" | "runId" | "stepId">> {
+/** A request carrying all three keys needed to find its suspended step. */
+type SuspendedOnAStep = ApprovalRequest &
+  Required<Pick<ApprovalRequest, "workflowId" | "runId" | "stepId">>;
+
+function isSuspendedOnAStep(request: ApprovalRequest): request is SuspendedOnAStep {
   return Boolean(request.workflowId && request.runId && request.stepId);
 }
 
