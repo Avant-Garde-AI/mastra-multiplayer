@@ -26,6 +26,7 @@ Many humans, one agent session. These pages are the long-form version of the
 | --- | --- |
 | [Approvals](./APPROVALS.md) | Multi-approver gates: policies, argument binding, expiry, the workflow pattern. |
 | [Concurrency](./CONCURRENCY.md) | Choosing a turn-taking mode, and what each one silently discards. |
+| [Channels](./CHANNELS.md) | Bringing Slack, Discord and the rest into a session as participants. |
 | [Security](./SECURITY.md) | Threat model, what the package does and does not defend against. |
 
 ## Project record

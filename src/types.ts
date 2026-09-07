@@ -9,16 +9,33 @@
 export type ParticipantId = string;
 export type SessionId = string;
 
-/** Where a participant is connected from. Useful for attribution and policy. */
-export type ParticipantSurface =
+/**
+ * Where a participant is connected from. Useful for attribution and policy.
+ *
+ * The named values are the platforms Mastra ships channel adapters for, plus
+ * the two non-channel surfaces. Any string is accepted, because Mastra's
+ * `channels.adapters` is keyed by arbitrary name and third-party adapters are
+ * ordinary packages — a closed union would make this package the bottleneck on
+ * somebody else's integration.
+ *
+ * The named members are still worth having: they autocomplete, and they stop
+ * `"Slack"` and `"slack"` becoming two surfaces by typo.
+ */
+export type KnownParticipantSurface =
   | "web"
+  | "api"
   | "slack"
   | "discord"
   | "teams"
   | "github"
-  | "linear"
-  | "api"
+  | "telegram"
+  | "whatsapp"
+  | "imessage"
   | "unknown";
+
+// `string & {}` keeps the named values in autocomplete while accepting any
+// string; a bare `| string` would collapse the union and lose both.
+export type ParticipantSurface = KnownParticipantSurface | (string & {});
 
 export type ParticipantRole =
   | "owner"

@@ -126,14 +126,16 @@ Mastra keys memory on `threadId` (per conversation) and `resourceId` (per user,
 across threads). In a shared session:
 
 - **`threadId`** → the session. Everyone reads and writes one conversation.
-- **`resourceId`** → **currently the session id.** `runTurn` passes
+- **`resourceId`** → **the session id, for memory.** `runTurn` passes
   `memory: { thread: session.threadId, resource: session.id }`, which makes
   resource-scoped memory per-room rather than per-person. That is the right
-  default for a shared session — resource-scoped working memory keyed to an
+  default for a shared session: resource-scoped working memory keyed to an
   individual means what one person tells the agent silently follows them out of
-  the room — but it means `Participant.resourceId` is not yet used by the
-  library. It is stored for your own per-user lookups and for channel adapters.
-  Making the mapping configurable is unscheduled; open an issue if you need it.
+  the room.
+  `Participant.resourceId` is a different thing — the person's stable identity
+  across sessions, set by [channel mapping](./CHANNELS.md) to
+  `${surface}:${userId}` and available for your own per-user lookups. Wiring it
+  into memory scoping is deliberately not done; open an issue if you need it.
 - **Working memory** should be `scope: "thread"` in a shared session, for the
   same reason.
 

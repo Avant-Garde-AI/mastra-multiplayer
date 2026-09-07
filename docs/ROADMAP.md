@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-07 · against `0.3.0` · detailed plans in [`roadmap/`](./roadmap/)
+Last gardened: 2026-09-07 · against `0.3.0` · `0.4.0` in progress — see [`roadmap/`](./roadmap/)
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -440,7 +440,7 @@ read `1.65.0-alpha.7` from the monorepo, and this package's peer range is
 
 ### R7 · Channel participants
 
-`next` · size `M` · confidence `high`
+`shipped` · size `M` · confidence `high`
 
 Map Slack, Discord, Teams and GitHub identity onto `Participant`, so a session
 can span a web UI and a Slack thread with one roster. `surface` and `resourceId`
@@ -452,10 +452,28 @@ rule and possibly belonging in a companion package. Mastra's adapters are
 separate `@chat-adapter/*` packages the *host* installs and hands to its own
 agent — this package never imports one.
 
-What is left is a pure mapping between two shapes we already own
-(`actor.userId` / `fullName` / `isBot` and `threadId` → `Participant` and a
-session), testable with a plain object. Ships first: smaller, self-contained,
-and no dependency on R6.
+**Shipped** as `mastra-multiplayer/channels`: `channelParticipant` (pure) and
+`ChannelBridge` (joins and forwards). No dependency on any chat SDK; the core
+entry point has no path to one.
+
+Three decisions worth recording, each mutation-checked:
+
+- **Ids are prefixed with the surface.** An unprefixed collision between two
+  platforms merges two people into one participant, which under
+  `excludeRequester` silently turns four-eyes into two.
+- **`isBot: 'unknown'` counts as a bot.** That errs toward excluding a real
+  human — a visible failure — over letting an automation satisfy a quorum, which
+  is a silent governance one. Logged at `warn`, and `allowBots` turns it off.
+- **Joining happens on arrival and on change, not per message.** An upsert per
+  message is safe but publishes `participant.joined` every time, filling the
+  event stream with one person repeatedly arriving.
+
+`ParticipantSurface` was widened while doing this: it named `linear`, for which
+Mastra has no adapter, and omitted `telegram`, `whatsapp` and `imessage` — one
+of which is among only two adapters that actually ship in the Mastra repo. It
+now accepts any string, because Mastra keys adapters by arbitrary name and a
+closed union would make this package the bottleneck on somebody else's
+integration.
 
 ## Researching
 

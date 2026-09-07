@@ -13,6 +13,7 @@ Every exported symbol, by entry point. Types are in
 | `mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
 | `mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
 | `mastra-multiplayer/bus/redis` | `RedisEventBus` |
+| `mastra-multiplayer/channels` | `channelParticipant`, `channelBridge`, `ChannelBridge` |
 | `mastra-multiplayer/concurrency/redis-lease` | `RedisTurnLease` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
@@ -267,6 +268,22 @@ the client state plus `send`, `setTyping`, `interrupt`, `vote`, and `client`.
 It calls `start()` on mount and `disconnect()` on unmount. The client is created
 once from the options given on first render — **changing `sessionId` later does
 not reconnect it.** Remount with a `key` when the session changes.
+
+## Channels
+
+`channelParticipant({ surface, actor, role? })` → `Participant`. Pure; usable
+without the bridge.
+
+`channelBridge(session, { resolveSession, role?, allowBots?, participant?, logger? })`
+→ `ChannelBridge`, whose `receive(message)` joins the sender and forwards the
+text, returning `{ status, sessionId?, participant? }`.
+
+`isBotActor(actor)` — `true` for `isBot: true` *and* `isBot: "unknown"`.
+
+Also exported: `ChannelActor`, `ChannelMessage`, `ReceiveResult`,
+`ReceiveStatus`, `ChannelBridgeOptions`.
+
+No dependency on any chat SDK. Full treatment in [CHANNELS](./CHANNELS.md).
 
 ## Logging
 
