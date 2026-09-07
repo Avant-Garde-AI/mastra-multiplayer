@@ -45,9 +45,15 @@ function participant(id: string, role: Participant["role"] = "approver"): Partic
 }
 
 describe.skipIf(!canRun)("workflow approval gates against @mastra/core", () => {
-  const { Mastra } = mastraCore!;
-  const { createWorkflow, createStep } = mastraWorkflows!;
-  const { z } = zod!;
+  // Read through optional chaining, not destructuring. `describe.skipIf` skips
+  // the *tests*, but vitest still runs this callback to collect them — so
+  // `const { Mastra } = mastraCore!` throws at collection time when the peer is
+  // absent, and the file fails instead of skipping. Verified by deleting
+  // `node_modules/@mastra` and running it.
+  const Mastra = mastraCore?.Mastra as typeof import("@mastra/core").Mastra;
+  const createWorkflow = mastraWorkflows?.createWorkflow as typeof import("@mastra/core/workflows").createWorkflow;
+  const createStep = mastraWorkflows?.createStep as typeof import("@mastra/core/workflows").createStep;
+  const z = zod?.z as typeof import("zod").z;
 
   const refundArgs = z.object({ amountCents: z.number(), orderId: z.string() });
   type RefundArgs = { amountCents: number; orderId: string };
