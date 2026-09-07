@@ -10,6 +10,7 @@ Many humans, one agent session. These pages are the long-form version of the
 | [Concepts](./CONCEPTS.md) | The vocabulary: session, participant, presence, turn, gate, binding. Read this first — the rest assumes it. |
 | [Architecture](./ARCHITECTURE.md) | How the layers fit together, and why there are two storage systems. |
 | [Roadmap](./ROADMAP.md) | What is planned, what is deliberately out of scope, and how the list is kept honest. |
+| [Medium-term plans](./roadmap/) | The next milestone in detail, longer horizons, and the research they are built on. |
 
 ## Reference
 

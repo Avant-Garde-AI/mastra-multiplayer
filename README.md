@@ -2,7 +2,7 @@
 
 Multiplayer primitives for [Mastra](https://mastra.ai) agents: **many humans in one agent session**.
 
-Mastra already handles the channel side of this well — the Signal API gives you concurrency modes for interleaved messages, and Channels puts an agent into Slack, Discord, Teams, GitHub and Linear. What it does not ship is the layer you need when the shared session lives in *your own product UI*: presence, per-participant attribution, multi-approver gates, and an audit trail of who asked for what.
+Mastra already handles the channel side of this well — the Signal API gives you concurrency modes for interleaved messages, and Channels puts an agent into Slack, Discord, Teams, GitHub, Telegram and more. What it does not ship is the layer you need when the shared session lives in *your own product UI*: presence, per-participant attribution, multi-approver gates, and an audit trail of who asked for what.
 
 That is what this package is.
 
@@ -20,7 +20,14 @@ The distinction matters because the hard problems are entirely different. Multi-
 npm install mastra-multiplayer
 ```
 
-Peer dependencies: `@mastra/core` (optional, for the server routes) and `react` (optional, for the hook).
+Every peer dependency is optional — a bare install pulls in no runtime dependencies at all, and the core primitives work without any of them:
+
+| | Needed for |
+| --- | --- |
+| `@mastra/core` | The agent itself, and the server routes |
+| `react` | `useMultiplayerSession` |
+| `@libsql/client` | `LibSQLMultiplayerStore` |
+| `ioredis` | `RedisEventBus`, `RedisTurnLease` |
 
 ## Quickstart
 
@@ -217,16 +224,34 @@ Full docs live in [`docs/`](./docs):
 [concurrency](./docs/CONCURRENCY.md) ·
 [storage](./docs/STORAGE.md) ·
 [security](./docs/SECURITY.md) ·
-[decision records](./docs/decisions)
+[decision records](./docs/decisions) ·
+[releasing](./docs/RELEASING.md)
+
+## Running more than one instance
+
+`EventBus` and `InMemoryMultiplayerStore` are single-process. For a deployment behind a load balancer, swap in the durable implementations — everything else is unchanged:
+
+```ts
+createMultiplayer({
+  agent,
+  store: new LibSQLMultiplayerStore(createClient({ url })),
+  bus: new RedisEventBus({ client: new Redis(url), subscriber: new Redis(url) }),
+  concurrency: { lease: new RedisTurnLease(new Redis(url)) },
+  logger,
+});
+```
+
+The lease is what keeps "one agent run at a time per session" true across processes; without it, two people posting to different instances start two concurrent runs. [Details](./docs/CONCURRENCY.md#running-on-more-than-one-instance).
+
+Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler (nothing here owns a timer), and `authorize` if roster membership is not the access rule you want.
 
 ## Roadmap
 
-`0.2.0` is about surviving a second process: a Redis-backed `EventBus`,
-persisted approval policies, a durable store implementation with a conformance
-suite, tests over the HTTP surface, and session-level authorization.
+`0.3.0` shipped the correctness work: tested and authorized HTTP surface, durable storage with a conformance suite, a distributed event bus and turn lease, backpressure, and a logger seam.
 
-The full list — including what is deliberately out of scope, and why — is in
-[`docs/ROADMAP.md`](./docs/ROADMAP.md).
+**`0.4.0` is about integration** — mapping channel identities onto participants, and approval gates as real workflow steps rather than a polling loop. The [detailed plan](./docs/roadmap/0.4.0-integration.md) is grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items.
+
+The board — including what is deliberately out of scope, and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ## License
 

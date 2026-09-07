@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-06 · against `0.3.0` · `0.2.0` and Phase 4 shipped
+Last gardened: 2026-09-07 · against `0.3.0` · detailed plans in [`roadmap/`](./roadmap/)
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -408,30 +408,54 @@ A sweep is idempotent, publishes `approval.resolved` and audits exactly as a
 vote does, and one unreadable record does not strand the rest of the session —
 a sweep that stopped on the first error would resolve nothing.
 
-## Next — after Phase 4
+## Next — `0.4.0` · Integration
 
-### R6 · Workflow step factory for gates
+Detailed plan: [`roadmap/0.4.0-integration.md`](./roadmap/0.4.0-integration.md).
+Both items were re-planned on 2026-09-07 after
+[reading Mastra's actual APIs](./roadmap/research/2026-09-07-mastra-apis.md)
+rather than assuming them — which changed both.
 
-`later` · size `M` · confidence `high`
+### R6 · Workflow-step approval gates
+
+`next` · size `L` · confidence `high`
 
 Wrap Mastra's `suspend()` / `resume()` so an approval gate is a workflow step
-rather than a hand-rolled polling loop. `examples/approval-gate/refund-tool.ts`
-currently shows the manual version; this collapses it to a few lines. Blocked on
-R2 — suspending across a restart is pointless while the policy does not survive
-one.
+rather than a hand-rolled polling loop.
 
-### R7 · Channel adapters
+**Grew from `M` to `L` after reading the API.** The factory is the easy half:
+votes arrive over this package's HTTP surface and workflows resume through
+`run.resume()`, and nothing connects them. Build only the step and every gate
+suspends for ever. The second piece is a *resumer* that watches the bus, plus
+the concurrency and start-up reconciliation that go with it.
 
-`later` · size `L` · confidence `medium`
+`ApprovalRequest.runId` and `stepId` have existed unused since `0.1.0` — they
+are exactly the keys the resumer needs.
 
-Map Slack, Discord, and GitHub identity onto `Participant`, so a session can
-span a web UI and a Slack thread with one roster. The `surface` and `resourceId`
-fields exist for this.
+R2 unblocked this: suspending across a restart was pointless while the policy
+did not survive one.
 
-Confidence is medium because it is unclear whether this belongs here or in a
-companion package. Each adapter drags in a vendor SDK, which fights the
-zero-dependency rule in [CONTRIBUTING](../CONTRIBUTING.md). Decide the packaging
-question before writing the first adapter.
+**Precondition:** re-check against a *published* `@mastra/core`. The research
+read `1.65.0-alpha.7` from the monorepo, and this package's peer range is
+`>=1.0.0`.
+
+### R7 · Channel participants
+
+`next` · size `M` · confidence `high`
+
+Map Slack, Discord, Teams and GitHub identity onto `Participant`, so a session
+can span a web UI and a Slack thread with one roster. `surface` and `resourceId`
+exist for this.
+
+**Was `L` at medium confidence on a premise that turned out to be wrong.** The
+worry was that each adapter drags in a vendor SDK, fighting the zero-dependency
+rule and possibly belonging in a companion package. Mastra's adapters are
+separate `@chat-adapter/*` packages the *host* installs and hands to its own
+agent — this package never imports one.
+
+What is left is a pure mapping between two shapes we already own
+(`actor.userId` / `fullName` / `isBot` and `threadId` → `Participant` and a
+session), testable with a plain object. Ships first: smaller, self-contained,
+and no dependency on R6.
 
 ## Researching
 
