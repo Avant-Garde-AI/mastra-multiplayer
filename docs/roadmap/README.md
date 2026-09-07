@@ -9,7 +9,7 @@ somebody's head until they start and rediscover it.
 
 | | |
 | --- | --- |
-| [`0.4.0-integration.md`](./0.4.0-integration.md) | The next milestone, in enough detail to start on. |
+| [`0.4.0-integration.md`](./0.4.0-integration.md) | The `0.4.0` milestone. **Shipped** — kept, with what it got wrong marked in place. |
 | [`HORIZONS.md`](./HORIZONS.md) | Beyond it — and what would have to be true before any of it is scheduled. |
 | [`research/`](./research/) | Findings that plans are built on, dated and sourced. |
 

@@ -285,6 +285,49 @@ Also exported: `ChannelActor`, `ChannelMessage`, `ReceiveResult`,
 
 No dependency on any chat SDK. Full treatment in [CHANNELS](./CHANNELS.md).
 
+## Workflows
+
+From `mastra-multiplayer/workflows`. `@mastra/core` is an optional peer and is
+imported by nothing here; the workflow surface is declared structurally, per
+[ADR 0004](./decisions/0004-structural-mastra-types.md).
+
+`approvalStep(host, options)` → **`createStep` parameters**, not a step. Wrap it:
+
+```ts
+const gate = createStep(approvalStep(multiplayer, { id, inputSchema, outputSchema,
+  workflowId, toolName, sessionId, requestedBy, summary, policy? }));
+```
+
+Building a step converts schemas, which is `@mastra/core`'s job — returning
+parameters is what keeps the peer optional. `inputSchema` and `outputSchema` pass
+through with their exact types, so the workflow chain either side of the gate
+stays typed.
+
+`sessionId`, `requestedBy` and `summary` take a value or a function of the step's
+execute params. Optional: `toolArgs` (defaults to `inputData`), `onApproved`
+(defaults to passing `inputData` through), `onDenied`, `resumeSchema`,
+`suspendSchema`, `description`.
+
+`approvalResumer(host, mastra, options?)` → `ApprovalResumer`:
+
+| | |
+| --- | --- |
+| `start()` | Listens for local decisions, reconciles once, returns a stop function. |
+| `stop()` | Stops listening. In-flight resumes are left to finish. |
+| `idle()` | Resolves when every resume it started has settled. |
+| `reconcile()` | Sweeps every session for gates that may still be holding a run open. |
+| `reconcileSession(id)` | The same, for one session. |
+| `resume(request)` | Wakes one run. Safe to call twice, from two processes. |
+
+Options: `lease` (a `TurnLease`; keyed per approval, so a resume never blocks an
+agent turn), `leaseTtlMs`, `logger`.
+
+Also exported: `ApprovalSuspendData`, `ApprovalResumeData`, `ApprovalStepOptions`,
+`ResumeResult`, `ResumeOutcome`, `StepExecuteParams`, `WorkflowLike`,
+`WorkflowRunLike`, `WorkflowRegistryLike`, `ApprovalHost`, `ResumerHost`.
+
+Full treatment in [APPROVALS](./APPROVALS.md#gates-as-workflow-steps).
+
 ## Logging
 
 `Logger` is a four-method interface (`debug`, `info`, `warn`, `error`), each

@@ -27,9 +27,13 @@ export interface RequestApprovalInput {
   toolArgs: unknown;
   summary: string;
   policy?: ApprovalPolicy;
+  workflowId?: string;
   runId?: string;
   stepId?: string;
 }
+
+/** Notified locally when a request stops being pending. */
+export type ApprovalResolvedHandler = (request: ApprovalRequest) => void;
 
 export class ApprovalError extends Error {
   constructor(
@@ -81,6 +85,41 @@ export class ApprovalGate {
   }
 
   private readonly logger: Logger;
+  private readonly resolvedHandlers = new Set<ApprovalResolvedHandler>();
+
+  /**
+   * Runs a handler in *this process* whenever a request resolves — approved,
+   * denied, or expired.
+   *
+   * This is deliberately not `bus.subscribe`. The bus is keyed by session, so
+   * hearing about every resolution would mean either a subscription per session
+   * or a new cross-session primitive; and it is at-most-once, so a listener
+   * that needed the event would still need a reconciling sweep behind it. The
+   * instance that resolved a request is already holding it, already has the
+   * application wired up, and is the obvious place to react.
+   *
+   * Handlers are **not awaited**. A resumer's downstream work is a workflow run
+   * — a refund, a deployment — and a vote's HTTP response must not block on it.
+   * A handler that throws is logged, never propagated: reacting to a decision
+   * failing must not undo the decision.
+   */
+  onResolved(handler: ApprovalResolvedHandler): () => void {
+    this.resolvedHandlers.add(handler);
+    return () => this.resolvedHandlers.delete(handler);
+  }
+
+  private notifyResolved(request: ApprovalRequest): void {
+    for (const handler of this.resolvedHandlers) {
+      try {
+        handler(request);
+      } catch (error) {
+        this.logger.error("an approval-resolved handler threw", {
+          approvalId: request.id,
+          error,
+        });
+      }
+    }
+  }
 
   async request(input: RequestApprovalInput): Promise<ApprovalRequest> {
     // Resolved once, here, and stored. The governance decision a requester saw
@@ -102,6 +141,7 @@ export class ApprovalGate {
       votes: [],
       createdAt: now,
       expiresAt: now + policy.expiresAfterMs,
+      ...(input.workflowId ? { workflowId: input.workflowId } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.stepId ? { stepId: input.stepId } : {}),
     };
@@ -185,6 +225,7 @@ export class ApprovalGate {
         approvalId,
         status,
       });
+      this.notifyResolved(request);
     }
 
     return request;
@@ -218,6 +259,10 @@ export class ApprovalGate {
       approvalId,
       status,
     });
+    // An expiry is a resolution. A gate that times out has to wake its workflow
+    // step exactly like a denied one, or timing out is the single case that
+    // hangs for ever.
+    this.notifyResolved(request);
     return request;
   }
 

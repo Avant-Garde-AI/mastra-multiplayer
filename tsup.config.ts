@@ -12,6 +12,7 @@ export default defineConfig({
     "src/bus/redis.ts",
     "src/concurrency/redis-lease.ts",
     "src/channels/index.ts",
+    "src/workflows/index.ts",
   ],
   format: ["esm"],
   dts: true,

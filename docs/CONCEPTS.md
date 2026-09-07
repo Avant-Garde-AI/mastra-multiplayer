@@ -39,8 +39,8 @@ One human, in one session, on one surface.
 
 `role` (`owner` · `editor` · `approver` · `viewer`) is what approval policies
 gate on. `surface` records where they are connected from (`web`, `slack`,
-`discord`, `teams`, `github`, `linear`, `api`, `unknown`) and is what channel
-adapters will populate ([R7](./ROADMAP.md#r7--channel-participants)).
+`discord`, `teams`, `github`, `api`, `unknown`, or any string of your own) and is
+what [channel mapping](./CHANNELS.md) populates.
 
 The `id` is your identity system's id, not one this package mints. It has to
 be, because it is what the audit ledger attributes actions to and what

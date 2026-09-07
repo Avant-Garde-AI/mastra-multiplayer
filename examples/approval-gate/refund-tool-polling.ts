@@ -1,10 +1,18 @@
 /**
- * A tool that cannot fire until two different people sign off, and never the
- * person who asked for it.
+ * A gated tool for an agent with no workflows: request approval, then block
+ * until someone decides.
  *
- * The pattern: the tool requests approval, suspends, and waits. The decision
- * arrives over HTTP from whoever votes. Before executing, the binding hash is
- * re-checked so an approval for one refund cannot authorize another.
+ * **Prefer [`refund-workflow.ts`](./refund-workflow.ts) if you have workflows.**
+ * Waiting inside `execute` holds an agent run open for as long as the humans
+ * take, and the wait dies with the process — a restart mid-approval loses the
+ * refund even though the ledger records a decision. A suspended workflow step
+ * survives both, because the waiting lives in Mastra's durable snapshot rather
+ * than in a promise.
+ *
+ * This version stays because not every agent has a workflow to hang the gate
+ * on, and a ten-minute wait in a long-lived process is a real, working answer.
+ * The governance is identical either way: same policies, same binding, same
+ * ledger.
  */
 // @ts-nocheck
 import { createTool } from "@mastra/core/tools";
