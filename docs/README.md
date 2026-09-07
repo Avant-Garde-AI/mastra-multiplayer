@@ -32,6 +32,7 @@ Many humans, one agent session. These pages are the long-form version of the
 | | |
 | --- | --- |
 | [Decisions](./decisions/) | Architecture decision records — choices made, with the reasoning attached. |
+| [Releasing](./RELEASING.md) | Cutting a version: checks, versioning rule, what ships. |
 | [Reviews](./reviews/) | Point-in-time reviews of the codebase. Findings feed the roadmap. |
 
 ## Conventions used in these docs
@@ -42,5 +43,7 @@ Many humans, one agent session. These pages are the long-form version of the
   section and nowhere else.
 - **No aspirational documentation.** If a page describes something the code does
   not do, that is a bug in the page. Fix the page or delete the claim.
-- **Version markers.** `0.1.0` means shipped in that release. `→ 0.2.0` means
-  targeted at it.
+- **Version markers.** A bare version (`0.3.0`) means shipped in that release.
+  `→ 0.4.0` means targeted at it. `0.1.0` and `0.2.0` are development
+  milestones that were never published; see the
+  [changelog](../CHANGELOG.md).

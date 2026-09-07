@@ -4,8 +4,8 @@ This package implements a governance control — multi-approver gates on
 consequential actions. That makes its failure modes worth stating plainly rather
 than leaving to be discovered.
 
-> `0.1.0` is pre-release and has had no external security review. Treat
-> everything here as a description of intent and known gaps, not an assurance.
+> `0.3.0` is pre-1.0 and has had no external security review. Treat everything
+> here as a description of intent and known gaps, not an assurance.
 
 ## Threat model
 
