@@ -6,7 +6,7 @@ Mastra already handles the channel side of this well — the Signal API gives yo
 
 That is what this package is.
 
-> Status: `0.3.0`, the first published release. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
+> Status: `0.4.0`. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
 
 ## What "multiplayer" means here
 
@@ -218,7 +218,7 @@ const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
 await store.migrate();
 ```
 
-Writing your own? Run the conformance suite against it — 38 framework-agnostic checks covering the parts of the contract the type signatures do not show:
+Writing your own? Run the conformance suite against it — 39 framework-agnostic checks covering the parts of the contract the type signatures do not show:
 
 ```ts
 import { conformanceChecks } from "mastra-multiplayer/storage/conformance";
@@ -295,9 +295,9 @@ Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler
 
 `0.3.0` shipped the correctness work: tested and authorized HTTP surface, durable storage with a conformance suite, a distributed event bus and turn lease, backpressure, and a logger seam.
 
-**`0.4.0` is about integration, and both items have landed:** channel participants (above), and approval gates as real Mastra workflow steps. The [plan](./docs/roadmap/0.4.0-integration.md) was grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items — and the gates were then built and tested against a *published* `@mastra/core`, not the monorepo version the research read.
+**`0.4.0` was about integration, and shipped both items:** channel participants (above), and approval gates as real Mastra workflow steps. The [plan](./docs/roadmap/0.4.0-integration.md) was grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items — and the gates were then built and tested against a *published* `@mastra/core`, not the monorepo version the research read.
 
-The board — including what is deliberately out of scope, and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+**Nothing is scheduled after `0.4.0` yet.** The board — including the candidate pool, and what is deliberately out of scope and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ## License
 

@@ -349,9 +349,14 @@ const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
 await store.migrate();   // idempotent
 ```
 
-`@libsql/client` is an optional peer dependency, imported by that subpath alone.
-`LibSQLLikeClient` is declared structurally, so a real `Client` satisfies it
-without this package depending on the driver.
+`@libsql/client` is an optional peer dependency, imported by nothing — the
+client is passed in and `LibSQLLikeClient` is declared structurally, so a real
+`Client` satisfies it without this package ever referencing the driver.
+Verified from a clean install: `mastra-multiplayer/storage/libsql` loads with no
+`@libsql/client` present. The same holds for `bus/redis` and
+`concurrency/redis-lease`.
+
+`react` is the one peer that is genuinely imported, by `client/react` alone.
 
 `conformanceChecks()` → `ConformanceCheck[]`, each `{ group, name, run(store) }`.
 Framework-agnostic and dependency-free; drive them from whatever test runner you

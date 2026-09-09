@@ -3,7 +3,12 @@
 All notable changes to this package. Dates are the day the work landed on
 `main`.
 
-## Unreleased
+## 0.4.0 — 2026-09-09
+
+**Theme: integration.** `0.3.0` made the package correct — tested, authorized,
+durable, distributed, operable. None of that made it easier to *reach*. Both
+`0.4.0` items are integration surfaces: a session that spans Slack, and an
+approval gate that is a real Mastra workflow step rather than a loop.
 
 ### Workflows
 - `mastra-multiplayer/workflows` makes an approval gate a suspended workflow
@@ -50,6 +55,20 @@ All notable changes to this package. Dates are the day the work landed on
   every approval ever resolved is re-checked on every sweep, for ever.
 
   Both fields are optional and additive; existing records read back unchanged.
+
+### Storage
+- The conformance suite checks that a store round-trips `workflowId` and
+  `resumedAt` (39 checks, up from 38). A store that maps `ApprovalRequest` to
+  columns rather than storing it whole will drop them, and dropping `workflowId`
+  makes every workflow gate skip resumption silently — the worst-shaped failure
+  this package can have. Both mutation-checked against a store that drops them.
+
+### Documentation
+- Corrected a claim in `docs/API.md` and `docs/ROADMAP.md` that `@libsql/client`
+  is "imported by that subpath alone". It is imported by *nothing* — the client
+  is passed in and typed structurally, exactly like `ioredis`. Verified from a
+  clean install: `storage/libsql`, `bus/redis` and `concurrency/redis-lease` all
+  load with no peer present. `react` is the one peer genuinely imported.
 
 ### Examples
 - `examples/approval-gate/refund-workflow.ts` is the gate as a workflow step.
@@ -254,9 +273,11 @@ The initial scaffold, plus the defects found reviewing it.
 
 ## Upgrading
 
-Nothing published before `0.3.0`, so there is nothing to migrate from. The
-breaking changes recorded above are between development milestones, and are
-listed for anyone tracking `main`:
+`0.3.0` → `0.4.0` needs one change, and only if you implement
+`MultiplayerStore` yourself — the last row below. Everything else is additive.
+
+The earlier rows are between development milestones that were never published,
+and are kept for anyone who tracked `main`:
 
 | Change | Since | What to do |
 | --- | --- | --- |
@@ -265,13 +286,15 @@ listed for anyone tracking `main`:
 | Custom `MultiplayerStore` must round-trip `policy` | `0.2.0` | Store it verbatim; run the [conformance suite](./docs/STORAGE.md#the-conformance-suite). |
 | Store reads of an unknown session return empty, writes reject | `0.2.0` | Match it, or run the conformance suite and let it tell you. |
 | An unknown session returns `403`, not `404` | `0.2.0` | Expect `403` — authorization runs before the session is loaded. |
+| Custom `MultiplayerStore` must round-trip `workflowId` and `resumedAt` | `0.4.0` | Store the whole `ApprovalRequest`; a store that maps fields to columns will drop them. Dropping `workflowId` makes every workflow gate skip resumption **silently**. The [conformance suite](./docs/STORAGE.md#the-conformance-suite) now checks both. |
 
 ## Known gaps
 
 - Turn-taking is per-process unless you configure a `TurnLease`. Without one,
   concurrent posts to different instances start two runs into one session.
 - Nothing drives approval expiry for you — wire `sweepExpiredApprovals()` into
-  a scheduler you already run.
+  a scheduler you already run. With workflow gates this also decides when an
+  expired gate's suspended run gets woken.
 - No CRDT/co-editing layer.
 - No independent evaluation of any of this. Multiplayer agents are new enough
   that the failure modes are still being found in production, not in benchmarks.

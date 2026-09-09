@@ -1,6 +1,6 @@
 {
   "name": "mastra-multiplayer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Multiplayer primitives for Mastra agents: presence, multi-approver gates, and a shared-session event bus for many humans in one agent session.",
   "keywords": [
     "mastra",

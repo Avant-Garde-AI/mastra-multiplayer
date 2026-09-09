@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-07 · against `0.3.0` · `0.4.0` in progress — see [`roadmap/`](./roadmap/)
+Last gardened: 2026-09-09 · against `0.4.0` · next milestone not yet scoped — see [`roadmap/`](./roadmap/)
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -180,10 +180,11 @@ Everyone who adopts the package has to write the persistence layer before they
 can deploy, from an interface with no reference to check their work against.
 
 **Shipped.** `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) and
-a 38-check conformance suite (`mastra-multiplayer/storage/conformance`).
+a 39-check conformance suite (`mastra-multiplayer/storage/conformance`).
 
-`@libsql/client` is an optional peer dependency imported by that subpath alone,
-so installing this package still pulls in no database driver. The client is
+`@libsql/client` is an optional peer dependency imported by nothing at all — the
+subpath takes a client rather than constructing one — so installing this package
+pulls in no database driver. The client is
 passed in, not constructed — connection lifetime and auth stay the host's.
 
 The suite is **framework-agnostic data**, not a test file: `conformanceChecks()`
@@ -408,12 +409,18 @@ A sweep is idempotent, publishes `approval.resolved` and audits exactly as a
 vote does, and one unreadable record does not strand the rest of the session —
 a sweep that stopped on the first error would resolve nothing.
 
-## Next — `0.4.0` · Integration
+## Shipped — `0.4.0` · Integration
 
-Detailed plan: [`roadmap/0.4.0-integration.md`](./roadmap/0.4.0-integration.md).
-Both items were re-planned on 2026-09-07 after
+Detailed plan: [`roadmap/0.4.0-integration.md`](./roadmap/0.4.0-integration.md),
+kept as written with what it got wrong marked in place. Both items were
+re-planned on 2026-09-07 after
 [reading Mastra's actual APIs](./roadmap/research/2026-09-07-mastra-apis.md)
-rather than assuming them — which changed both.
+rather than assuming them — which changed both, and building them changed the
+plan again. That is the argument for the research habit, not against it.
+
+**Nothing is scheduled after this.** `Researching` below is the candidate pool;
+the next milestone gets scoped when there is a reason to pick from it rather
+than a slot to fill.
 
 ### R6 · Workflow-step approval gates
 
@@ -544,6 +551,12 @@ Kept here so the questions stay answered.
 | Publishing under `@mastra/` | The scope belongs to the Mastra org. Community packages use an unscoped prefix. |
 
 ## Released
+
+### `0.4.0` — integration
+
+Approval gates as Mastra workflow steps (`R6`) and channel participants (`R7`).
+The first release where the package meets another system on its own terms
+rather than asking to be wired up by hand.
 
 ### `0.3.0` — the first published release
 
