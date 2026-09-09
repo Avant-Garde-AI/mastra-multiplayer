@@ -124,7 +124,7 @@ describe("MyPostgresStore", () => {
 Each check gets a store with no sessions in it and creates what it needs. They
 are plain functions, so vitest, jest, `node:test`, or a bare script all work.
 
-38 checks across six groups — `sessions`, `participants`, `presence`,
+39 checks across six groups — `sessions`, `participants`, `presence`,
 `approvals`, `audit`, `isolation` — and each failure message says what the
 contract is, not just that two values differed.
 

@@ -426,12 +426,34 @@ export function conformanceChecks(): ConformanceCheck[] {
     } },
 
     { group: "approvals", name: "round-trips the workflow binding", async run(store) {
+      // All three keys, because all three are needed to find the suspended step
+      // again: `getWorkflow(workflowId).createRun({ runId })`, then
+      // `resume({ step: stepId })`. A store that drops `workflowId` — easy to do
+      // when mapping fields to columns rather than storing a document — makes
+      // every gate look like an approval that was never attached to a workflow,
+      // so the resumer skips it. Silently, and for ever.
       await withSession(store);
-      await store.saveApproval(approval("ap1", { runId: "run_9", stepId: "step_refund" }));
+      await store.saveApproval(approval("ap1", {
+        workflowId: "refund",
+        runId: "run_9",
+        stepId: "step_refund",
+      }));
 
       const found = await store.getApproval("ap1");
+      eq(found?.workflowId, "refund", "workflowId must survive");
       eq(found?.runId, "run_9", "runId must survive");
       eq(found?.stepId, "step_refund", "stepId must survive");
+    } },
+
+    { group: "approvals", name: "round-trips resumedAt", async run(store) {
+      // Bookkeeping, not correctness: a store that drops this re-checks every
+      // approval it has ever resolved against the workflow store on every
+      // sweep, for ever. Cheap to get right, invisible when wrong.
+      await withSession(store);
+      await store.saveApproval(approval("ap1", { status: "approved", resumedAt: 12_345 }));
+
+      eq((await store.getApproval("ap1"))?.resumedAt, 12_345,
+        "resumedAt must survive, or the reconciling sweep never stops growing");
     } },
 
     { group: "approvals", name: "lists by session", async run(store) {
