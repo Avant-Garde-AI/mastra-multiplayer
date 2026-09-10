@@ -93,10 +93,11 @@ approval gate that is a real Mastra workflow step rather than a loop.
   which has no adapter, and omitted `telegram`, `whatsapp` and `imessage`.
   Widening only — existing values still typecheck.
 
-## 0.3.0 — 2026-09-06
+## 0.3.0 — 2026-09-06 (unpublished)
 
-**The first published release.** `0.1.0` and `0.2.0` below are development
-milestones that were never put on npm; they are kept because the roadmap,
+**Intended as the first release, and tagged as one, but never actually put on
+npm** — so `0.4.0` is the first version anyone can install. `0.1.0` through
+`0.3.0` are all development milestones; they are kept because the roadmap,
 commits and decision records refer to them by name, and because the breaking
 changes between them are what an early adopter reading this needs.
 
@@ -273,11 +274,11 @@ The initial scaffold, plus the defects found reviewing it.
 
 ## Upgrading
 
-`0.3.0` → `0.4.0` needs one change, and only if you implement
-`MultiplayerStore` yourself — the last row below. Everything else is additive.
+`0.4.0` is the first version on npm, so there is nothing to upgrade *from*
+unless you were tracking `main`. If you were: the only change that needs action
+is the last row below, and only if you implement `MultiplayerStore` yourself.
 
-The earlier rows are between development milestones that were never published,
-and are kept for anyone who tracked `main`:
+Every row is between development milestones, kept for exactly that audience:
 
 | Change | Since | What to do |
 | --- | --- | --- |
