@@ -5,7 +5,7 @@ to Mastra's `registerApiRoute`:
 
 ```ts
 import { registerApiRoute } from "@mastra/core/server";
-import { multiplayerRoutes } from "mastra-multiplayer/server";
+import { multiplayerRoutes } from "@avant-garde-ai/mastra-multiplayer/server";
 
 const routes = multiplayerRoutes(multiplayer, { authenticate });
 

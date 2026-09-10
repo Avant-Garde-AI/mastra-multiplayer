@@ -5,14 +5,22 @@ All notable changes to this package. Dates are the day the work landed on
 
 ## 0.4.0 — 2026-09-09
 
+**Published as `@avant-garde-ai/mastra-multiplayer`.** The package is scoped to
+the organization that owns the repository. Nothing before this was on npm, so
+there is no unscoped version to migrate from and none will be published — the
+bare name stays unclaimed rather than becoming a stub that points elsewhere.
+
+`publishConfig.access: "public"` is now load-bearing: a scoped package defaults
+to `restricted`.
+
 **Theme: integration.** `0.3.0` made the package correct — tested, authorized,
 durable, distributed, operable. None of that made it easier to *reach*. Both
 `0.4.0` items are integration surfaces: a session that spans Slack, and an
 approval gate that is a real Mastra workflow step rather than a loop.
 
 ### Workflows
-- `mastra-multiplayer/workflows` makes an approval gate a suspended workflow
-  step instead of a polling loop inside a tool (`R6`). `approvalStep` returns
+- `@avant-garde-ai/mastra-multiplayer/workflows` makes an approval gate a
+  suspended workflow step instead of a polling loop inside a tool (`R6`). `approvalStep` returns
   `createStep` parameters — building a step converts schemas, which is
   `@mastra/core`'s job, and returning parameters is what keeps the peer
   optional. The waiting lives in Mastra's durable snapshot, so nothing holds an
@@ -76,7 +84,7 @@ approval gate that is a real Mastra workflow step rather than a loop.
   answer for an agent with no workflow to hang a gate on.
 
 ### Channels
-- `mastra-multiplayer/channels` maps a Mastra channel actor onto a
+- `@avant-garde-ai/mastra-multiplayer/channels` maps a Mastra channel actor onto a
   `Participant`, so a session can span a web UI and a Slack thread with one
   roster (`R7`). `channelParticipant` is the pure mapping; `ChannelBridge`
   joins the sender and forwards the message.
@@ -110,7 +118,7 @@ running, and running unattended.
   client showed the run stopped while the agent kept streaming. A run in flight
   now listens for that event for its duration. On by default, no lease needed.
 - `TurnLease` makes "one run at a time per session" hold across processes.
-  `RedisTurnLease` (`mastra-multiplayer/concurrency/redis-lease`) uses
+  `RedisTurnLease` (`@avant-garde-ai/mastra-multiplayer/concurrency/redis-lease`) uses
   `SET NX PX` with ownership-checked renew and release; `InMemoryTurnLease`
   ships for tests. Optional via `concurrency: { lease }` — without it, two
   people posting to different instances at the same moment start two concurrent
@@ -148,7 +156,7 @@ Theme: **surviving a second process.** Everything before this assumed one Node
 process holding all state in memory.
 
 ### Event bus
-- `RedisEventBus` (`mastra-multiplayer/bus/redis`) — a shared bus for
+- `RedisEventBus` (`@avant-garde-ai/mastra-multiplayer/bus/redis`) — a shared bus for
   deployments running more than one process (`R1`). `ioredis` is an optional
   peer dependency; clients are passed in and typed structurally.
 - New `MultiplayerBus` interface, implemented by both `EventBus` and
@@ -166,10 +174,11 @@ process holding all state in memory.
   `subscribeFrom`.
 
 ### Storage
-- `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) — a durable
-  store on LibSQL/SQLite/Turso (`R3`). `@libsql/client` is an optional peer
-  dependency imported by that subpath alone; the core stays dependency-free.
-- A conformance suite (`mastra-multiplayer/storage/conformance`) — 38
+- `LibSQLMultiplayerStore` (`@avant-garde-ai/mastra-multiplayer/storage/libsql`)
+  — a durable store on LibSQL/SQLite/Turso (`R3`). `@libsql/client` is an
+  optional peer dependency imported by nothing at all — the client is passed in
+  — so the core stays dependency-free.
+- A conformance suite (`@avant-garde-ai/mastra-multiplayer/storage/conformance`) — 38
   framework-agnostic checks any `MultiplayerStore` implementation can run, with
   no test-framework dependency.
 - **Contract clarified:** reads against an unknown session return empty or null,

@@ -16,8 +16,8 @@
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
-import { fourEyes } from "mastra-multiplayer";
-import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+import { fourEyes } from "@avant-garde-ai/mastra-multiplayer";
+import { approvalStep, approvalResumer } from "@avant-garde-ai/mastra-multiplayer/workflows";
 import { multiplayer } from "../shared-session/mastra.js";
 
 const refundArgs = z.object({

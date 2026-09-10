@@ -15,7 +15,7 @@
  *
  * ```ts
  * import { Redis } from "ioredis";
- * import { RedisEventBus } from "mastra-multiplayer/bus/redis";
+ * import { RedisEventBus } from "@avant-garde-ai/mastra-multiplayer/bus/redis";
  *
  * const bus = new RedisEventBus({
  *   client: new Redis(url),

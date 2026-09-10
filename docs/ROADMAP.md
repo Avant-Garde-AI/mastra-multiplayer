@@ -85,8 +85,8 @@ tested, authorized, durable surface.
 message published on instance A never reaches the SSE stream held open on
 instance B. Half the room sees the conversation.
 
-**Shipped.** `RedisEventBus` (`mastra-multiplayer/bus/redis`), behind a new
-`MultiplayerBus` interface that `EventBus` also implements. `ioredis` is an
+**Shipped.** `RedisEventBus` (`@avant-garde-ai/mastra-multiplayer/bus/redis`),
+behind a new `MultiplayerBus` interface that `EventBus` also implements. `ioredis` is an
 optional peer dependency imported by nothing — clients are passed in and typed
 structurally.
 
@@ -179,8 +179,9 @@ stored policy fails eight tests.
 Everyone who adopts the package has to write the persistence layer before they
 can deploy, from an interface with no reference to check their work against.
 
-**Shipped.** `LibSQLMultiplayerStore` (`mastra-multiplayer/storage/libsql`) and
-a 39-check conformance suite (`mastra-multiplayer/storage/conformance`).
+**Shipped.** `LibSQLMultiplayerStore`
+(`@avant-garde-ai/mastra-multiplayer/storage/libsql`) and a 39-check conformance
+suite (`@avant-garde-ai/mastra-multiplayer/storage/conformance`).
 
 `@libsql/client` is an optional peer dependency imported by nothing at all — the
 subpath takes a client rather than constructing one — so installing this package
@@ -434,7 +435,7 @@ factory is the easy half: votes arrive over this package's HTTP surface and
 workflows resume through `run.resume()`, and nothing connects them. Build only
 the step and every gate suspends for ever.
 
-**Shipped** as `mastra-multiplayer/workflows`: `approvalStep` (returns
+**Shipped** as `@avant-garde-ai/mastra-multiplayer/workflows`: `approvalStep` (returns
 `createStep` parameters, so `@mastra/core` stays an optional peer) and
 `ApprovalResumer`. Verified against the real engine, not a fake — see
 `test/workflows.integration.test.ts`.
@@ -477,8 +478,8 @@ rule and possibly belonging in a companion package. Mastra's adapters are
 separate `@chat-adapter/*` packages the *host* installs and hands to its own
 agent — this package never imports one.
 
-**Shipped** as `mastra-multiplayer/channels`: `channelParticipant` (pure) and
-`ChannelBridge` (joins and forwards). No dependency on any chat SDK; the core
+**Shipped** as `@avant-garde-ai/mastra-multiplayer/channels`: `channelParticipant`
+(pure) and `ChannelBridge` (joins and forwards). No dependency on any chat SDK; the core
 entry point has no path to one.
 
 Three decisions worth recording, each mutation-checked:

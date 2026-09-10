@@ -17,7 +17,7 @@ The distinction matters because the hard problems are entirely different. Multi-
 ## Install
 
 ```bash
-npm install mastra-multiplayer
+npm install @avant-garde-ai/mastra-multiplayer
 ```
 
 Every peer dependency is optional — a bare install pulls in no runtime dependencies at all, and the core primitives work without any of them:
@@ -32,7 +32,7 @@ Every peer dependency is optional — a bare install pulls in no runtime depende
 ## Quickstart
 
 ```ts
-import { createMultiplayer } from "mastra-multiplayer";
+import { createMultiplayer } from "@avant-garde-ai/mastra-multiplayer";
 
 const multiplayer = createMultiplayer({
   agent: supportAgent,
@@ -81,7 +81,7 @@ multiplayer.presence.startSweeping(); // ages out stale participants
 Human-in-the-loop stops being simple the moment there is more than one human. The policy engine covers the patterns that actually show up in governance reviews:
 
 ```ts
-import { fourEyes, quorumOf, approverOnly } from "mastra-multiplayer";
+import { fourEyes, quorumOf, approverOnly } from "@avant-garde-ai/mastra-multiplayer";
 
 fourEyes()        // two approvals, requester excluded (maker-checker)
 quorumOf(3)       // any three eligible participants
@@ -103,7 +103,7 @@ A sequenced, per-session pub/sub with a replay buffer. Clients reconnect with `L
 `EventBus` runs in one process. For a deployment behind a load balancer, swap in `RedisEventBus` and every instance shares the room:
 
 ```ts
-import { RedisEventBus } from "mastra-multiplayer/bus/redis";
+import { RedisEventBus } from "@avant-garde-ai/mastra-multiplayer/bus/redis";
 
 createMultiplayer({
   agent,
@@ -135,7 +135,7 @@ A single-user chat loop assumes one message, one turn. `TurnController` gives yo
 A session can span your web UI and a Slack thread. Everyone lands in the same roster, is labelled by name in the prompt the agent sees, and can vote on an approval:
 
 ```ts
-import { channelBridge } from "mastra-multiplayer/channels";
+import { channelBridge } from "@avant-garde-ai/mastra-multiplayer/channels";
 
 const bridge = channelBridge(multiplayer, {
   resolveSession: ({ threadId }) => sessionForThread(threadId),
@@ -153,7 +153,7 @@ A gate that waits inside a tool holds an agent run open for as long as the human
 
 ```ts
 import { createStep } from "@mastra/core/workflows";
-import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+import { approvalStep, approvalResumer } from "@avant-garde-ai/mastra-multiplayer/workflows";
 
 const gate = createStep(approvalStep(multiplayer, {
   id: "approve-refund",
@@ -212,7 +212,7 @@ Long shared threads outgrow the context window faster than single-user ones. Mas
 Two implementations ship: `InMemoryMultiplayerStore` for development and tests (it loses everything on restart), and `LibSQLMultiplayerStore` for deployment on LibSQL, SQLite, or Turso.
 
 ```ts
-import { LibSQLMultiplayerStore } from "mastra-multiplayer/storage/libsql";
+import { LibSQLMultiplayerStore } from "@avant-garde-ai/mastra-multiplayer/storage/libsql";
 
 const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
 await store.migrate();
@@ -221,7 +221,7 @@ await store.migrate();
 Writing your own? Run the conformance suite against it — 39 framework-agnostic checks covering the parts of the contract the type signatures do not show:
 
 ```ts
-import { conformanceChecks } from "mastra-multiplayer/storage/conformance";
+import { conformanceChecks } from "@avant-garde-ai/mastra-multiplayer/storage/conformance";
 
 for (const check of conformanceChecks()) {
   it(`${check.group} — ${check.name}`, () => check.run(makeFreshStore()));

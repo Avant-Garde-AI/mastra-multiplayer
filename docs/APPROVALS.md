@@ -36,7 +36,7 @@ interface ApprovalPolicy {
 Three built-ins cover the patterns that show up in governance reviews:
 
 ```ts
-import { fourEyes, quorumOf, approverOnly } from "mastra-multiplayer";
+import { fourEyes, quorumOf, approverOnly } from "@avant-garde-ai/mastra-multiplayer";
 
 fourEyes()     // two approvals, requester excluded (maker-checker)
 quorumOf(3)    // any three eligible participants
@@ -152,9 +152,9 @@ something outside its own call stack. Options, worst to best:
 2. **Subscribe to the bus** for `approval.resolved` on that session. Better,
    still holds the process.
 3. **Suspend a workflow step.** The right answer, and what
-   [`mastra-multiplayer/workflows`](./API.md#workflows) provides. The waiting
-   lives in Mastra's durable snapshot rather than in a promise, so nothing is
-   held open and a deploy mid-decision costs nothing.
+   [`@avant-garde-ai/mastra-multiplayer/workflows`](./API.md#workflows)
+   provides. The waiting lives in Mastra's durable snapshot rather than in a
+   promise, so nothing is held open and a deploy mid-decision costs nothing.
 
 Options 1 and 2 remain reasonable for an agent with no workflows to hang a gate
 on — see [`refund-tool-polling.ts`](../examples/approval-gate/refund-tool-polling.ts).
@@ -165,7 +165,7 @@ ledger.
 
 ```ts
 import { createStep } from "@mastra/core/workflows";
-import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+import { approvalStep, approvalResumer } from "@avant-garde-ai/mastra-multiplayer/workflows";
 
 const gate = createStep(
   approvalStep<typeof refundArgs, typeof refundArgs, RefundArgs>(multiplayer, {
@@ -318,7 +318,7 @@ that fallback is the exact failure this design ends, so it is never silent.
 render "1 of 2 approvals" without a round trip:
 
 ```ts
-import { evaluate, remainingApprovals, fourEyes } from "mastra-multiplayer";
+import { evaluate, remainingApprovals, fourEyes } from "@avant-garde-ai/mastra-multiplayer";
 
 const left = remainingApprovals(fourEyes(), request); // 2 → 1 → approved
 ```

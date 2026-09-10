@@ -10,7 +10,7 @@
  *
  * ```ts
  * import { createStep } from "@mastra/core/workflows";
- * import { approvalStep, approvalResumer } from "mastra-multiplayer/workflows";
+ * import { approvalStep, approvalResumer } from "@avant-garde-ai/mastra-multiplayer/workflows";
  *
  * const gate = createStep(
  *   approvalStep(multiplayer, {

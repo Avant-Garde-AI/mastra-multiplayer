@@ -1,5 +1,5 @@
 {
-  "name": "mastra-multiplayer",
+  "name": "@avant-garde-ai/mastra-multiplayer",
   "version": "0.4.0",
   "description": "Multiplayer primitives for Mastra agents: presence, multi-approver gates, and a shared-session event bus for many humans in one agent session.",
   "keywords": [

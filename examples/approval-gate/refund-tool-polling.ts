@@ -18,7 +18,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-import { fourEyes } from "mastra-multiplayer";
+import { fourEyes } from "@avant-garde-ai/mastra-multiplayer";
 import { multiplayer } from "../shared-session/mastra.js";
 
 export const refundTool = createTool({

@@ -13,7 +13,7 @@
  * vitest, jest, `node:test`, or a script. Zero dependencies.
  *
  * ```ts
- * import { conformanceChecks } from "mastra-multiplayer/storage/conformance";
+ * import { conformanceChecks } from "@avant-garde-ai/mastra-multiplayer/storage/conformance";
  *
  * for (const check of conformanceChecks()) {
  *   it(`${check.group} — ${check.name}`, async () => {

@@ -4,7 +4,7 @@
  *
  * ```ts
  * import { Redis } from "ioredis";
- * import { RedisTurnLease } from "mastra-multiplayer/concurrency/redis-lease";
+ * import { RedisTurnLease } from "@avant-garde-ai/mastra-multiplayer/concurrency/redis-lease";
  *
  * createMultiplayer({
  *   agent,
