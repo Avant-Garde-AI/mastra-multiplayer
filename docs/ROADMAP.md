@@ -552,13 +552,14 @@ Kept here so the questions stay answered.
 
 ## Released
 
-### `0.4.0` — integration
+### `0.4.0` — integration · the first published release
 
 Approval gates as Mastra workflow steps (`R6`) and channel participants (`R7`).
 The first release where the package meets another system on its own terms
-rather than asking to be wired up by hand.
+rather than asking to be wired up by hand — and the first that anyone outside
+the repository can install.
 
-### `0.3.0` — the first published release
+### `0.3.0` — operability (unpublished)
 
 Phase 4, operability: cross-instance turn coordination (`R14`), a logger seam
 (`R10`), SSE backpressure (`R9`), and driven approval expiry (`R8`).
