@@ -12,8 +12,8 @@ import { registerApiRoute } from "@mastra/core/server";
 import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
-import { createMultiplayer } from "mastra-multiplayer";
-import { multiplayerRoutes } from "mastra-multiplayer/server";
+import { createMultiplayer } from "@avant-garde-ai/mastra-multiplayer";
+import { multiplayerRoutes } from "@avant-garde-ai/mastra-multiplayer/server";
 
 const storage = new LibSQLStore({ url: "file:./multiplayer.db" });
 

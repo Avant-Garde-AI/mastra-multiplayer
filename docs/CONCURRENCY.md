@@ -100,7 +100,7 @@ flag — correct in one process, and silently wrong in two. A `TurnLease` makes
 it true across processes:
 
 ```ts
-import { RedisTurnLease } from "mastra-multiplayer/concurrency/redis-lease";
+import { RedisTurnLease } from "@avant-garde-ai/mastra-multiplayer/concurrency/redis-lease";
 
 createMultiplayer({
   agent,

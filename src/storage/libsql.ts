@@ -11,7 +11,7 @@
  *
  * ```ts
  * import { createClient } from "@libsql/client";
- * import { LibSQLMultiplayerStore } from "mastra-multiplayer/storage/libsql";
+ * import { LibSQLMultiplayerStore } from "@avant-garde-ai/mastra-multiplayer/storage/libsql";
  *
  * const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
  * await store.migrate();

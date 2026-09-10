@@ -52,6 +52,16 @@ without saying "await it" has done half the job.
 6. Commit, tag `v<version>`, push the tag.
 7. `npm publish`.
 
+## The scope is not decoration
+
+The package is `@avant-garde-ai/mastra-multiplayer`, and **a scoped package
+defaults to `restricted`** — which on a free account fails the publish outright.
+`publishConfig.access: "public"` in `package.json` is what prevents that; it was
+inert while the name was unscoped and is load-bearing now. Do not remove it.
+
+Publishing also needs the `avant-garde-ai` npm organization to exist and to have
+you as a member with publish rights. A token cannot create a scope.
+
 ## What ships
 
 `files` in `package.json` is an allowlist: `dist`, `README.md`, `CHANGELOG.md`,
@@ -73,8 +83,8 @@ Watch the first install from a clean directory:
 
 ```bash
 npm pack
-cd $(mktemp -d) && npm init -y > /dev/null && npm i /path/to/mastra-multiplayer-*.tgz
-node -e "import('mastra-multiplayer').then(m => console.log(Object.keys(m).length, 'exports'))"
+cd $(mktemp -d) && npm init -y > /dev/null && npm i /path/to/avant-garde-ai-mastra-multiplayer-*.tgz
+node -e "import('@avant-garde-ai/mastra-multiplayer').then(m => console.log(Object.keys(m).length, 'exports'))"
 ```
 
 Peer dependencies are all optional, so a bare install must work with none of

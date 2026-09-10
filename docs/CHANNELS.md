@@ -23,7 +23,7 @@ testable with a plain object.
 ## The mapping
 
 ```ts
-import { channelParticipant } from "mastra-multiplayer/channels";
+import { channelParticipant } from "@avant-garde-ai/mastra-multiplayer/channels";
 
 channelParticipant({
   surface: "slack",
@@ -52,7 +52,7 @@ roster the model reads.
 ## The bridge
 
 ```ts
-import { channelBridge } from "mastra-multiplayer/channels";
+import { channelBridge } from "@avant-garde-ai/mastra-multiplayer/channels";
 
 const bridge = channelBridge(multiplayer, {
   resolveSession: ({ threadId }) => sessionForThread(threadId),

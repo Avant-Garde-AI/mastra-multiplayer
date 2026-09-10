@@ -54,8 +54,8 @@ session in the path.
 
 | | Entry point | Use for |
 | --- | --- | --- |
-| `InMemoryMultiplayerStore` | `mastra-multiplayer/storage` | Development, tests, single-process demos |
-| `LibSQLMultiplayerStore` | `mastra-multiplayer/storage/libsql` | Deployment on LibSQL/SQLite/Turso |
+| `InMemoryMultiplayerStore` | `@avant-garde-ai/mastra-multiplayer/storage` | Development, tests, single-process demos |
+| `LibSQLMultiplayerStore` | `@avant-garde-ai/mastra-multiplayer/storage/libsql` | Deployment on LibSQL/SQLite/Turso |
 
 Both pass the same [conformance suite](#the-conformance-suite).
 
@@ -73,7 +73,7 @@ cache you put in front of a database.
 
 ```ts
 import { createClient } from "@libsql/client";
-import { LibSQLMultiplayerStore } from "mastra-multiplayer/storage/libsql";
+import { LibSQLMultiplayerStore } from "@avant-garde-ai/mastra-multiplayer/storage/libsql";
 
 const store = new LibSQLMultiplayerStore(createClient({ url: "file:./mp.db" }));
 await store.migrate();   // idempotent; safe on every boot
@@ -110,7 +110,7 @@ The interface has more implicit contract than its type signatures show. So the
 checks ship as data, framework-agnostic, with no dependencies:
 
 ```ts
-import { conformanceChecks } from "mastra-multiplayer/storage/conformance";
+import { conformanceChecks } from "@avant-garde-ai/mastra-multiplayer/storage/conformance";
 
 describe("MyPostgresStore", () => {
   for (const check of conformanceChecks()) {

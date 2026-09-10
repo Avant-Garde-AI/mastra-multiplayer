@@ -18,10 +18,10 @@ import { createSlackAdapter } from "@chat-adapter/slack";
 import { openai } from "@ai-sdk/openai";
 import { createClient } from "@libsql/client";
 
-import { createMultiplayer } from "mastra-multiplayer";
-import { channelBridge } from "mastra-multiplayer/channels";
-import { multiplayerRoutes } from "mastra-multiplayer/server";
-import { LibSQLMultiplayerStore } from "mastra-multiplayer/storage/libsql";
+import { createMultiplayer } from "@avant-garde-ai/mastra-multiplayer";
+import { channelBridge } from "@avant-garde-ai/mastra-multiplayer/channels";
+import { multiplayerRoutes } from "@avant-garde-ai/mastra-multiplayer/server";
+import { LibSQLMultiplayerStore } from "@avant-garde-ai/mastra-multiplayer/storage/libsql";
 
 const client = createClient({ url: "file:./multiplayer.db" });
 const store = new LibSQLMultiplayerStore(client);

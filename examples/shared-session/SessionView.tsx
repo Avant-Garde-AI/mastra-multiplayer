@@ -4,7 +4,7 @@
  */
 // @ts-nocheck
 import { useState } from "react";
-import { useMultiplayerSession } from "mastra-multiplayer/client/react";
+import { useMultiplayerSession } from "@avant-garde-ai/mastra-multiplayer/client/react";
 
 export function SessionView({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState("");
