@@ -36,7 +36,7 @@ channelParticipant({
 | Mastra | `Participant` |
 | --- | --- |
 | `actor.userId` | `id` and `resourceId`, prefixed with the surface |
-| `actor.fullName ?? actor.userName ?? userId` | `displayName` |
+| `actor.fullName ?? actor.userName ?? stable alias` | `displayName` |
 | adapter key | `surface` |
 | `actor.isBot` | filtered, not mapped |
 
@@ -45,9 +45,9 @@ will eventually hand out the same opaque id. An unprefixed collision merges two
 people into one participant — and under `excludeRequester`, silently turns
 four-eyes into two with nothing looking wrong.
 
-**`displayName` falls back to the raw id** rather than a placeholder. `U06CK1E9HN2`
-is ugly and honest; `"Unknown"` would put one label on two different people in a
-roster the model reads.
+**`displayName` never needs to expose the provider id.** A nameless actor gets a
+stable label such as `Participant 18B4A2`. Supply `fallbackDisplayName` when the
+host already has private aliases such as `Guest 2`.
 
 ## The bridge
 
@@ -71,6 +71,54 @@ await bridge.receive({
 
 `receive` joins the sender if they are new, forwards the text, and reports what
 it did: `delivered`, `ignored_bot`, `ignored_no_session`, or `ignored_empty`.
+
+### Structured content
+
+`text` remains supported. Media-capable adapters can instead send provider-neutral
+content without manufacturing placeholder text:
+
+```ts
+await bridge.receive({
+  surface: "imessage",
+  actor,
+  threadId: groupId,
+  content: [
+    { type: "text", text: "This was her favorite birthday." },
+    {
+      type: "media",
+      mediaType: "image",
+      url: temporaryDownloadUrl,
+      name: "birthday.jpg",
+      providerId: attachmentId,
+    },
+  ],
+});
+```
+
+Structured content is retained on the human `message` event. Text-only agents
+receive a safe description such as `[image attachment: birthday.jpg]`; remote
+URLs and provider ids are not copied into the model prompt.
+
+When both `content` and compatibility `text` are supplied, `content` is
+authoritative. A message with neither meaningful text nor media is ignored.
+
+### Authoritative rosters
+
+Some providers return a complete group-member snapshot separately from message
+delivery. Reconcile it explicitly:
+
+```ts
+await bridge.reconcileRoster({
+  sessionId,
+  surface: "imessage",
+  participants: providerMembers.map(toParticipant),
+  authoritative: true,
+});
+```
+
+An authoritative snapshot upserts changed members and removes missing members
+from that surface only. Web and other-channel participants are left alone.
+Omit `authoritative` for partial snapshots; partial snapshots never remove.
 
 That is the whole integration. See
 [`examples/slack-session/`](../examples/slack-session/mastra.ts) for a session
@@ -115,8 +163,9 @@ changed. A rename propagates; a hundred messages do not.
 - **It does not send anything back to the channel.** The agent's reply reaches
   Slack through Mastra's adapter, which owns that half. This package is the
   social layer around the conversation, not a transport.
-- **It does not model leaving.** A channel has no reliable "left" signal.
-  Presence ages out on its own; the roster does not.
+- **It does not infer leaving from ordinary messages.** Use authoritative roster
+  reconciliation when the provider offers a complete snapshot. Otherwise,
+  presence ages out and the roster is retained.
 - **It does not deduplicate across surfaces.** The same human on Slack and on
   the web is two participants with two ids, and under four-eyes they are two
   people. If your identity system can link them, pass your own `participant`

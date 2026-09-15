@@ -1,5 +1,6 @@
 import type {
   ApprovalRequest,
+  ChannelContentPart,
   ParticipantId,
   Participant,
   PresenceState,
@@ -38,6 +39,8 @@ export interface MessageEvent extends BaseEvent {
   type: "message";
   participantId: ParticipantId | null;
   text: string;
+  /** Structured source content for clients that can render attachments. */
+  content?: ChannelContentPart[];
   /** Set when this message came from the agent rather than a human. */
   fromAgent: boolean;
 }

@@ -72,6 +72,21 @@ describe("MultiplayerSession", () => {
     expect(agent.prompts).toHaveLength(0);
   });
 
+  it("accepts structured media without legacy text", async () => {
+    const agent = fakeAgent();
+    const mp = createMultiplayer({ agent });
+    const session = await mp.createSession({ threadId: "t1", id: "s1" });
+    await mp.join(session.id, person("alice"));
+
+    await mp.send({
+      sessionId: session.id,
+      participantId: "alice",
+      content: [{ type: "media", mediaType: "image", alt: "A birthday cake" }],
+    });
+
+    expect(agent.prompts[0]).toBe("[alice]: [image attachment: A birthday cake]");
+  });
+
   it("replays buffered events for a late joiner", async () => {
     const mp = createMultiplayer({ agent: fakeAgent() });
     const session = await mp.createSession({ threadId: "t1", id: "s1" });

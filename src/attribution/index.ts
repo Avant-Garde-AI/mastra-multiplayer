@@ -1,4 +1,8 @@
-import type { InboundMessage, Participant } from "../types.js";
+import type {
+  ChannelContentPart,
+  InboundMessage,
+  Participant,
+} from "../types.js";
 
 /**
  * A model handed a shared transcript with no speaker labels will read it as
@@ -16,6 +20,24 @@ export interface AttributionOptions {
 
 const defaultFormat = (participant: Participant | null, text: string): string =>
   participant ? `[${participant.displayName}]: ${text}` : text;
+
+/**
+ * Produces a safe text representation for agents that do not accept multimodal
+ * input. Remote URLs and provider ids are intentionally omitted.
+ */
+export function channelContentToText(content: ChannelContentPart[]): string {
+  return content
+    .map((part) => {
+      if (part.type === "text") return part.text.trim();
+
+      const description = part.alt?.trim() || part.name?.trim() || part.mimeType?.trim();
+      return description
+        ? `[${part.mediaType} attachment: ${description}]`
+        : `[${part.mediaType} attachment]`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
 
 /** Prefixes a message with its author so turn-taking survives the context window. */
 export function labelMessage(

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { ApprovalGate, type ApprovalPolicy } from "./approvals/index.js";
-import { labelBatch, withMultiplayerContext } from "./attribution/index.js";
+import {
+  channelContentToText,
+  labelBatch,
+  withMultiplayerContext,
+} from "./attribution/index.js";
 import { EventBus, type EventBusOptions } from "./bus/event-bus.js";
 import type { MultiplayerBus } from "./bus/bus.js";
 import { TurnController, type Turn, type TurnControllerOptions } from "./concurrency/index.js";
@@ -11,6 +15,7 @@ import { consoleLogger, safeLogger, type Logger } from "./internal/logger.js";
 import type {
   ApprovalRequest,
   AuditAction,
+  ChannelContentPart,
   InboundMessage,
   Participant,
   ParticipantId,
@@ -157,14 +162,22 @@ export class MultiplayerSession {
   async send(input: {
     sessionId: SessionId;
     participantId: ParticipantId;
-    text: string;
+    /** Existing text-only input. Optional when `content` is present. */
+    text?: string;
+    content?: ChannelContentPart[];
     addressedToAgent?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
+    const text = input.content?.length
+      ? channelContentToText(input.content)
+      : input.text?.trim() ?? "";
+    if (!text) throw new RangeError("A message must contain text or media content");
+
     const message: InboundMessage = {
       sessionId: input.sessionId,
       participantId: input.participantId,
-      text: input.text,
+      text,
+      ...(input.content?.length ? { content: input.content } : {}),
       receivedAt: Date.now(),
       addressedToAgent: input.addressedToAgent ?? true,
       ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -176,6 +189,7 @@ export class MultiplayerSession {
       sessionId: message.sessionId,
       participantId: message.participantId,
       text: message.text,
+      ...(message.content ? { content: message.content } : {}),
       fromAgent: false,
     });
     await this.audit(message.sessionId, "message.sent", message.participantId, {});

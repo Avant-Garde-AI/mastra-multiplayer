@@ -57,14 +57,26 @@ describe("channelParticipant", () => {
     });
   });
 
-  it("prefers fullName, then userName, then the raw id", () => {
+  it("prefers fullName, then userName, then a stable privacy-safe label", () => {
     const name = (actor: Parameters<typeof channelParticipant>[0]["actor"]) =>
       channelParticipant({ surface: "slack", actor }).displayName;
 
     expect(name({ userId: "U1", fullName: "Alice Chen", userName: "alice" })).toBe("Alice Chen");
     expect(name({ userId: "U1", userName: "alice" })).toBe("alice");
-    // Ugly and honest. A placeholder would put one label on two people.
-    expect(name({ userId: "U1" })).toBe("U1");
+    expect(name({ userId: "U1" })).toMatch(/^Participant [A-F0-9]{6}$/);
+    expect(name({ userId: "U1" })).toBe(name({ userId: "U1" }));
+    expect(name({ userId: "U1" })).not.toBe(name({ userId: "U2" }));
+    expect(name({ userId: "+15555550123" })).not.toContain("5555550123");
+  });
+
+  it("allows a host to provide its own anonymous naming policy", () => {
+    expect(
+      channelParticipant({
+        surface: "sms",
+        actor: { userId: "+15555550123" },
+        fallbackDisplayName: () => "Guest 2",
+      }).displayName,
+    ).toBe("Guest 2");
   });
 
   it("keeps the same user id on two surfaces apart", () => {
@@ -287,6 +299,155 @@ describe("ChannelBridge", () => {
 
     expect(result.status).toBe("ignored_empty");
     expect(await multiplayer.store.listParticipants("s1")).toEqual([]);
+  });
+
+  it("accepts a media-only message and preserves structured content", async () => {
+    const prompts: string[] = [];
+    const multiplayer = createMultiplayer({
+      agent: {
+        id: "support",
+        async stream(prompt) {
+          prompts.push(prompt);
+          return { textStream: (async function* () { yield "ack"; })() };
+        },
+      },
+      logger: silentLogger,
+    });
+    await multiplayer.createSession({ threadId: "t1", id: "s1" });
+    const bridge = channelBridge(multiplayer, {
+      resolveSession: () => "s1",
+      logger: silentLogger,
+    });
+    const messages: MultiplayerEvent[] = [];
+    multiplayer.bus.subscribe("s1", (event) => messages.push(event));
+
+    const result = await bridge.receive(
+      slackMessage({
+        text: undefined,
+        content: [
+          {
+            type: "media",
+            mediaType: "image",
+            url: "https://provider.example/private/token",
+            name: "family-photo.jpg",
+          },
+        ],
+      }),
+    );
+
+    expect(result.status).toBe("delivered");
+    expect(prompts[0]).toBe("[Alice Chen]: [image attachment: family-photo.jpg]");
+    expect(prompts[0]).not.toContain("provider.example");
+    expect(
+      messages.find((event) => event.type === "message" && !event.fromAgent),
+    ).toMatchObject({
+      content: [{ type: "media", mediaType: "image", name: "family-photo.jpg" }],
+    });
+  });
+
+  it("uses structured content instead of duplicating compatibility text", async () => {
+    const { multiplayer, bridge } = await setup();
+    const send = vi.spyOn(multiplayer, "send");
+
+    await bridge.receive(
+      slackMessage({
+        text: "duplicate",
+        content: [{ type: "text", text: "canonical" }],
+        addressedToAgent: false,
+      }),
+    );
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "canonical", content: [{ type: "text", text: "canonical" }] }),
+    );
+  });
+
+  describe("roster reconciliation", () => {
+    it("adds, updates, and removes members from an authoritative snapshot", async () => {
+      const { multiplayer, bridge } = await setup();
+      await multiplayer.join("s1", {
+        id: "web:owner",
+        displayName: "Owner",
+        role: "owner",
+        surface: "web",
+      });
+      await multiplayer.join("s1", {
+        id: "sms:old",
+        displayName: "Old name",
+        role: "editor",
+        surface: "sms",
+      });
+      await multiplayer.join("s1", {
+        id: "sms:gone",
+        displayName: "Gone",
+        role: "editor",
+        surface: "sms",
+      });
+
+      const result = await bridge.reconcileRoster({
+        sessionId: "s1",
+        surface: "sms",
+        authoritative: true,
+        participants: [
+          {
+            id: "sms:old",
+            displayName: "Current name",
+            role: "editor",
+            surface: "sms",
+          },
+          {
+            id: "sms:new",
+            displayName: "New member",
+            role: "editor",
+            surface: "sms",
+          },
+        ],
+      });
+
+      expect(result).toEqual({
+        joined: ["sms:new"],
+        updated: ["sms:old"],
+        unchanged: [],
+        removed: ["sms:gone"],
+      });
+      expect((await multiplayer.store.listParticipants("s1")).map((p) => p.id).sort()).toEqual([
+        "sms:new",
+        "sms:old",
+        "web:owner",
+      ]);
+    });
+
+    it("does not remove absent members from a partial snapshot", async () => {
+      const { multiplayer, bridge } = await setup();
+      await multiplayer.join("s1", {
+        id: "sms:existing",
+        displayName: "Existing",
+        role: "editor",
+        surface: "sms",
+      });
+
+      const result = await bridge.reconcileRoster({
+        sessionId: "s1",
+        surface: "sms",
+        participants: [],
+      });
+
+      expect(result.removed).toEqual([]);
+      expect(await multiplayer.store.getParticipant("s1", "sms:existing")).not.toBeNull();
+    });
+
+    it("rejects a participant from another surface", async () => {
+      const { bridge } = await setup();
+      await expect(
+        bridge.reconcileRoster({
+          sessionId: "s1",
+          surface: "sms",
+          participants: [
+            { id: "web:x", displayName: "X", role: "editor", surface: "web" },
+          ],
+        }),
+      ).rejects.toThrow("belongs to web, not sms");
+    });
   });
 
   it("honours addressedToAgent", async () => {

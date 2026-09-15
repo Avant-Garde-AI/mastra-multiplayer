@@ -10,6 +10,28 @@ export type ParticipantId = string;
 export type SessionId = string;
 
 /**
+ * Provider-neutral content accepted from chat, SMS, and messaging adapters.
+ *
+ * URLs and provider ids remain transport data. The default prompt renderer only
+ * describes media to the model; it never copies a remote URL into the prompt.
+ */
+export type ChannelContentPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "media";
+      mediaType: "image" | "audio" | "video" | "file";
+      url?: string;
+      mimeType?: string;
+      name?: string;
+      alt?: string;
+      providerId?: string;
+      metadata?: Record<string, unknown>;
+    };
+
+/**
  * Where a participant is connected from. Useful for attribution and policy.
  *
  * The named values are the platforms Mastra ships channel adapters for, plus
@@ -252,7 +274,10 @@ export type ConcurrencyMode = "queue" | "debounce" | "batch" | "skip" | "preempt
 export interface InboundMessage {
   sessionId: SessionId;
   participantId: ParticipantId;
+  /** Text representation used by text-only agents and existing consumers. */
   text: string;
+  /** Structured source content, when the transport supplied it. */
+  content?: ChannelContentPart[];
   receivedAt: number;
   /** True when the message explicitly @-mentions the agent. */
   addressedToAgent: boolean;

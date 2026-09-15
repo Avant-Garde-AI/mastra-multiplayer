@@ -3,6 +3,19 @@
 All notable changes to this package. Dates are the day the work landed on
 `main`.
 
+## Unreleased
+
+### Channels
+- `ChannelMessage` accepts provider-neutral text and media content while keeping
+  the existing text-only call shape compatible. Media-only messages now enter
+  sessions, structured content reaches message events, and the text fallback
+  omits remote URLs and provider ids from prompts.
+- `ChannelBridge.reconcileRoster()` applies complete or partial provider roster
+  snapshots. Authoritative snapshots remove absent members from the declared
+  surface only.
+- Nameless channel actors receive stable pseudonymous display labels by default.
+  Hosts can override the fallback naming policy.
+
 ## 0.4.0 — 2026-09-09
 
 **Theme: integration.** `0.3.0` made the package correct — tested, authorized,

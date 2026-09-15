@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { labelBatch, rosterPrompt, withMultiplayerContext } from "../src/attribution/index.js";
+import {
+  channelContentToText,
+  labelBatch,
+  rosterPrompt,
+  withMultiplayerContext,
+} from "../src/attribution/index.js";
 import type { InboundMessage, Participant } from "../src/types.js";
 
 const people: Participant[] = [
@@ -38,5 +43,22 @@ describe("attribution", () => {
   it("returns an empty roster prompt for an empty session", () => {
     expect(rosterPrompt([])).toBe("");
     expect(withMultiplayerContext("base", [])).toBe("base");
+  });
+
+  it("renders media without leaking its remote URL or provider id", () => {
+    const rendered = channelContentToText([
+      { type: "text", text: "Here it is" },
+      {
+        type: "media",
+        mediaType: "audio",
+        name: "story.m4a",
+        url: "https://provider.example/signed-secret",
+        providerId: "private-provider-id",
+      },
+    ]);
+
+    expect(rendered).toBe("Here it is\n[audio attachment: story.m4a]");
+    expect(rendered).not.toContain("signed-secret");
+    expect(rendered).not.toContain("private-provider-id");
   });
 });
