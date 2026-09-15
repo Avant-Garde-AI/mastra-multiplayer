@@ -6,7 +6,7 @@ Mastra already handles the channel side of this well — the Signal API gives yo
 
 That is what this package is.
 
-> Status: `0.4.0`, the first published release. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
+> Status: `0.5.0`. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
 
 ## What "multiplayer" means here
 
@@ -297,10 +297,11 @@ Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler
 
 **`0.4.0` was about integration, and shipped both items:** channel participants (above), and approval gates as real Mastra workflow steps. The [plan](./docs/roadmap/0.4.0-integration.md) was grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items — and the gates were then built and tested against a *published* `@mastra/core`, not the monorepo version the research read.
 
-**`0.5.0` is in review:** asynchronous channel content, authoritative rosters,
-typed provider correlation, and durable-host-selected batches with awaited run
-results. The board — including what remains deliberately out of scope and why —
-is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+**`0.5.0` ships asynchronous channels:** provider-neutral text and media,
+authoritative rosters, typed provider correlation, privacy-safe actor labels,
+and durable-host-selected batches with awaited run results. The board —
+including what remains deliberately out of scope and why — is
+[`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ## License
 

@@ -5,6 +5,8 @@ All notable changes to this package. Dates are the day the work landed on
 
 ## Unreleased
 
+## 0.5.0 — 2026-09-15
+
 ### Channels
 - `ChannelMessage` accepts provider-neutral text and media content while keeping
   the existing text-only call shape compatible. Media-only messages now enter
