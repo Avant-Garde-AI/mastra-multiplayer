@@ -1,6 +1,6 @@
 # Roadmap
 
-Last gardened: 2026-09-09 · against `0.4.0` · next milestone not yet scoped — see [`roadmap/`](./roadmap/)
+Last gardened: 2026-09-15 · against `0.4.0` · `0.5.0` release candidate in review
 
 This is a *gardened* roadmap, not a wish list. Every item names the problem it
 solves, what "done" looks like, and roughly what it costs. Items that stop being
@@ -549,6 +549,20 @@ Kept here so the questions stay answered.
 | A UI component library | The hook is headless on purpose. Vendored design systems do not survive contact with a real product. |
 | WebSocket transport | Rejected with reasoning in [ADR 0002](./decisions/0002-sse-over-websockets.md). Revisit only if R11 lands and needs a bidirectional channel anyway. |
 | Publishing under `@mastra/` | The scope belongs to the Mastra org. Community packages use an unscoped prefix. |
+
+## Next: `0.5.0` — asynchronous channels
+
+Real group-message integration exposed four assumptions in the first channel
+bridge: every message had text, every roster was learned sender by sender,
+provider ids lived in arbitrary metadata, and every turn began from an
+in-process timer.
+
+The release candidate adds provider-neutral media content, privacy-safe actor
+labels, authoritative roster snapshots, typed provider correlation, and
+host-driven batches with awaited results. A durable host owns the inbox, quiet
+window, cursor, and outbox; this package owns attribution and one leased agent
+turn. The complete suite, including Redis-backed two-instance coverage, passes
+on the feature branch.
 
 ## Released
 

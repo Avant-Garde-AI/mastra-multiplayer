@@ -297,7 +297,10 @@ Two things you drive yourself: `sweepExpiredApprovals()` from your own scheduler
 
 **`0.4.0` was about integration, and shipped both items:** channel participants (above), and approval gates as real Mastra workflow steps. The [plan](./docs/roadmap/0.4.0-integration.md) was grounded in [research against Mastra's actual APIs](./docs/roadmap/research/2026-09-07-mastra-apis.md), which changed both items — and the gates were then built and tested against a *published* `@mastra/core`, not the monorepo version the research read.
 
-**Nothing is scheduled after `0.4.0` yet.** The board — including the candidate pool, and what is deliberately out of scope and why — is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
+**`0.5.0` is in review:** asynchronous channel content, authoritative rosters,
+typed provider correlation, and durable-host-selected batches with awaited run
+results. The board — including what remains deliberately out of scope and why —
+is [`docs/ROADMAP.md`](./docs/ROADMAP.md).
 
 ## License
 

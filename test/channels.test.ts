@@ -479,6 +479,32 @@ describe("ChannelBridge", () => {
     );
   });
 
+  it("forwards typed provider correlation", async () => {
+    const { multiplayer, bridge } = await setup();
+    const send = vi.spyOn(multiplayer, "send");
+
+    await bridge.receive(
+      slackMessage({
+        correlation: {
+          providerEventId: "event-1",
+          providerMessageId: "message-1",
+          providerThreadId: "thread-1",
+        },
+        addressedToAgent: false,
+      }),
+    );
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correlation: {
+          providerEventId: "event-1",
+          providerMessageId: "message-1",
+          providerThreadId: "thread-1",
+        },
+      }),
+    );
+  });
+
   it("lets a host replace the mapping entirely", async () => {
     const { multiplayer, bridge } = await setup({
       participant: ({ actor }) => ({

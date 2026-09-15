@@ -145,6 +145,38 @@ describe.runIf(available)("turn-taking across instances", () => {
   });
 
   describe("with a lease", () => {
+    it("lets only one durable host claim an explicit batch", async () => {
+      const a = instance("reply from A");
+      const b = instance("reply from B");
+      await seed([a, b], "s1");
+
+      const [left, right] = await Promise.all([
+        a.runBatch({
+          sessionId: "s1",
+          messages: [{ participantId: "p0", text: "one", receivedAt: 1 }],
+        }),
+        b.runBatch({
+          sessionId: "s1",
+          messages: [{ participantId: "p1", text: "two", receivedAt: 2 }],
+        }),
+      ]);
+
+      expect([left.status, right.status].sort()).toEqual(["busy", "completed"]);
+
+      // The losing host retained its durable batch and can retry after the
+      // winner releases the lease; nothing was queued in process memory.
+      const retry = left.status === "busy"
+        ? await a.runBatch({
+            sessionId: "s1",
+            messages: [{ participantId: "p0", text: "one", receivedAt: 1 }],
+          })
+        : await b.runBatch({
+            sessionId: "s1",
+            messages: [{ participantId: "p1", text: "two", receivedAt: 2 }],
+          });
+      expect(retry.status).toBe("completed");
+    });
+
     it("serializes turns started on two instances at once", async () => {
       const a = instance("reply from A");
       const b = instance("reply from B");

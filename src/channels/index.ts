@@ -19,6 +19,7 @@ import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 import type { MultiplayerSession } from "../session.js";
 import type {
   ChannelContentPart,
+  ChannelCorrelation,
   Participant,
   ParticipantId,
   ParticipantRole,
@@ -56,6 +57,7 @@ export interface ChannelMessage {
   text?: string;
   /** Provider-neutral structured content. Takes precedence over `text`. */
   content?: ChannelContentPart[];
+  correlation?: ChannelCorrelation;
   /** Whether the agent should reply. Default true. */
   addressedToAgent?: boolean;
   metadata?: Record<string, unknown>;
@@ -248,6 +250,7 @@ export class ChannelBridge {
       participantId: participant.id,
       text: channelContentToText(content),
       content,
+      ...(message.correlation ? { correlation: message.correlation } : {}),
       addressedToAgent: message.addressedToAgent ?? true,
       ...(message.metadata ? { metadata: message.metadata } : {}),
     });

@@ -102,6 +102,20 @@ URLs and provider ids are not copied into the model prompt.
 When both `content` and compatibility `text` are supplied, `content` is
 authoritative. A message with neither meaningful text nor media is ignored.
 
+Provider ids have a typed correlation field rather than requiring arbitrary
+metadata:
+
+```ts
+correlation: {
+  providerEventId: event.id,
+  providerMessageId: event.messageId,
+  providerThreadId: event.groupId,
+}
+```
+
+They reach `TurnContext.messages` for tracing and idempotency decisions but are
+not rendered into the model prompt.
+
 ### Authoritative rosters
 
 Some providers return a complete group-member snapshot separately from message

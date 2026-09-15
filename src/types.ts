@@ -31,6 +31,13 @@ export type ChannelContentPart =
       metadata?: Record<string, unknown>;
     };
 
+/** Provider identifiers used for idempotency and trace correlation. */
+export interface ChannelCorrelation {
+  providerEventId?: string;
+  providerMessageId?: string;
+  providerThreadId?: string;
+}
+
 /**
  * Where a participant is connected from. Useful for attribution and policy.
  *
@@ -244,6 +251,7 @@ export type AuditAction =
   | "message.sent"
   | "agent.run.started"
   | "agent.run.finished"
+  | "agent.run.failed"
   | "agent.run.interrupted"
   | "approval.requested"
   | "approval.voted"
@@ -278,6 +286,7 @@ export interface InboundMessage {
   text: string;
   /** Structured source content, when the transport supplied it. */
   content?: ChannelContentPart[];
+  correlation?: ChannelCorrelation;
   receivedAt: number;
   /** True when the message explicitly @-mentions the agent. */
   addressedToAgent: boolean;

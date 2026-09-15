@@ -45,7 +45,13 @@ export interface Turn {
   preempts: boolean;
 }
 
-export type TurnRunner = (turn: Turn) => Promise<void>;
+export type TurnRunner<TResult = void> = (turn: Turn) => Promise<TResult>;
+
+export type ExplicitTurnResult<TResult> =
+  | { status: "completed"; value: TResult }
+  | { status: "busy" }
+  | { status: "unavailable"; error: unknown }
+  | { status: "failed"; error: unknown };
 
 interface SessionState {
   running: boolean;
@@ -70,7 +76,7 @@ interface SessionState {
  * - `skip`     drop messages that arrive while the agent is busy
  * - `preempt`  abort the in-flight run and start over with the new message
  */
-export class TurnController {
+export class TurnController<TResult = void> {
   private readonly mode: ConcurrencyMode;
   private readonly windowMs: number;
   private readonly maxBatchSize: number;
@@ -89,7 +95,7 @@ export class TurnController {
   private readonly holderId = randomUUID();
 
   constructor(
-    private readonly runner: TurnRunner,
+    private readonly runner: TurnRunner<TResult>,
     options: TurnControllerOptions = {},
   ) {
     this.mode = options.mode ?? "queue";
@@ -127,7 +133,7 @@ export class TurnController {
         break;
 
       case "preempt":
-        if (state.running && state.abort) state.abort.abort();
+        if (state.running && state.abort) state.abort.abort("preempted");
         state.queue.push(message);
         break;
 
@@ -147,11 +153,70 @@ export class TurnController {
     await this.drain(message.sessionId);
   }
 
+  /**
+   * Tries to run a complete batch selected by a durable host.
+   *
+   * Unlike `submit`, this never creates an in-memory timer or retry queue. A
+   * busy or unavailable result means the host still owns the batch and may
+   * retry it later without advancing its durable cursor.
+   */
+  async runExplicit(input: {
+    sessionId: SessionId;
+    messages: InboundMessage[];
+  }): Promise<ExplicitTurnResult<TResult>> {
+    if (input.messages.length === 0) {
+      throw new RangeError("An explicit turn requires at least one message");
+    }
+    if (input.messages.some((message) => message.sessionId !== input.sessionId)) {
+      throw new RangeError("Every explicit-turn message must belong to the session");
+    }
+
+    const state = this.stateFor(input.sessionId);
+    if (
+      state.running ||
+      state.queue.length > 0 ||
+      state.pending.length > 0 ||
+      state.timer !== null ||
+      state.retry !== null
+    ) {
+      return { status: "busy" };
+    }
+
+    state.running = true;
+    if (this.lease) {
+      const lease = await this.tryAcquireLease(input.sessionId);
+      if (!lease.acquired) {
+        state.running = false;
+        return lease.error
+          ? { status: "unavailable", error: lease.error }
+          : { status: "busy" };
+      }
+    }
+
+    state.abort = new AbortController();
+    const renewal = this.lease ? this.startRenewing(input.sessionId, state) : null;
+    try {
+      return {
+        status: "completed",
+        value: await this.runner({
+          sessionId: input.sessionId,
+          messages: input.messages,
+          preempts: false,
+        }),
+      };
+    } catch (error) {
+      return { status: "failed", error };
+    } finally {
+      await this.releaseClaim(input.sessionId, state, renewal);
+      if (state.queue.length > 0) void this.drain(input.sessionId);
+    }
+  }
+
   /** Cancels the in-flight run and clears anything waiting. */
   interrupt(sessionId: SessionId): void {
     const state = this.states.get(sessionId);
     if (!state) return;
-    state.abort?.abort();
+    state.abort?.abort("interrupted");
     state.queue = [];
     state.pending = [];
     if (state.timer) {
@@ -213,16 +278,7 @@ export class TurnController {
         this.logger.error("turn failed", { sessionId, error });
       }
     } finally {
-      if (renewal) clearInterval(renewal);
-      state.running = false;
-      state.abort = null;
-      if (this.lease) {
-        await this.lease
-          .release(sessionId, this.holderId)
-          .catch((error) =>
-            this.logger.warn("could not release the turn lease", { sessionId, error }),
-          );
-      }
+      await this.releaseClaim(sessionId, state, renewal);
     }
 
     if (state.queue.length > 0) await this.drain(sessionId);
@@ -235,18 +291,16 @@ export class TurnController {
    * these messages are still owed a reply once it finishes.
    */
   private async acquireLease(sessionId: SessionId, state: SessionState): Promise<boolean> {
-    let acquired = false;
-    try {
-      acquired = await this.lease!.acquire(sessionId, this.holderId, this.leaseTtlMs);
-    } catch (error) {
+    const result = await this.tryAcquireLease(sessionId);
+    if (result.error) {
       // A lease backend that is down must not silently degrade into running
       // anyway — that is the concurrent-run bug it exists to prevent.
       this.logger.error("could not reach the turn lease; not running", {
         sessionId,
-        error,
+        error: result.error,
       });
     }
-    if (acquired) return true;
+    if (result.acquired) return true;
 
     if (!state.retry) {
       state.retry = setTimeout(() => {
@@ -256,6 +310,39 @@ export class TurnController {
       unrefTimer(state.retry);
     }
     return false;
+  }
+
+  private async tryAcquireLease(
+    sessionId: SessionId,
+  ): Promise<{ acquired: boolean; error?: unknown }> {
+    try {
+      return {
+        acquired: await this.lease!.acquire(
+          sessionId,
+          this.holderId,
+          this.leaseTtlMs,
+        ),
+      };
+    } catch (error) {
+      return { acquired: false, error };
+    }
+  }
+
+  private async releaseClaim(
+    sessionId: SessionId,
+    state: SessionState,
+    renewal: ReturnType<typeof setInterval> | null,
+  ): Promise<void> {
+    if (renewal) clearInterval(renewal);
+    state.running = false;
+    state.abort = null;
+    if (this.lease) {
+      await this.lease
+        .release(sessionId, this.holderId)
+        .catch((error) =>
+          this.logger.warn("could not release the turn lease", { sessionId, error }),
+        );
+    }
   }
 
   /**
@@ -282,7 +369,7 @@ export class TurnController {
             error,
           });
         }
-        state.abort?.abort();
+        state.abort?.abort("lease_lost");
       })();
     }, this.leaseRenewMs);
 
