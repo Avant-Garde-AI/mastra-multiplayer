@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TurnController } from "../src/concurrency/index.js";
+import { InMemoryTurnLease, type TurnLease } from "../src/concurrency/lease.js";
 import type { InboundMessage } from "../src/types.js";
 
 const msg = (participantId: string, text: string): InboundMessage => ({
@@ -145,5 +146,88 @@ describe("TurnController", () => {
 
     gate.resolve();
     await running;
+  });
+
+  describe("explicit host-driven turns", () => {
+    it("runs the supplied batch immediately and returns the runner value", async () => {
+      const controller = new TurnController(async (turn) =>
+        turn.messages.map((message) => message.text).join(" | "),
+      );
+
+      const result = await controller.runExplicit({
+        sessionId: "s1",
+        messages: [msg("alice", "one"), msg("bob", "two")],
+      });
+
+      expect(result).toEqual({ status: "completed", value: "one | two" });
+    });
+
+    it("returns busy without consuming a competing batch", async () => {
+      const gate = deferred();
+      const controller = new TurnController(async (turn) => {
+        await gate.promise;
+        return turn.messages[0]!.text;
+      });
+
+      const first = controller.runExplicit({
+        sessionId: "s1",
+        messages: [msg("alice", "one")],
+      });
+      const second = await controller.runExplicit({
+        sessionId: "s1",
+        messages: [msg("bob", "two")],
+      });
+
+      expect(second).toEqual({ status: "busy" });
+      gate.resolve();
+      await expect(first).resolves.toEqual({ status: "completed", value: "one" });
+    });
+
+    it("uses the shared lease across controller instances", async () => {
+      const gate = deferred();
+      const lease = new InMemoryTurnLease();
+      const first = new TurnController(async () => {
+        await gate.promise;
+        return "first";
+      }, { lease });
+      const second = new TurnController(async () => "second", { lease });
+
+      const running = first.runExplicit({
+        sessionId: "s1",
+        messages: [msg("alice", "one")],
+      });
+      await Promise.resolve();
+
+      await expect(
+        second.runExplicit({ sessionId: "s1", messages: [msg("bob", "two")] }),
+      ).resolves.toEqual({ status: "busy" });
+
+      gate.resolve();
+      await running;
+      await expect(
+        second.runExplicit({ sessionId: "s1", messages: [msg("bob", "two")] }),
+      ).resolves.toEqual({ status: "completed", value: "second" });
+    });
+
+    it("distinguishes an unavailable lease backend from a held lease", async () => {
+      const unavailable: TurnLease = {
+        acquire: async () => { throw new Error("lease offline"); },
+        renew: async () => false,
+        release: async () => {},
+      };
+      const controller = new TurnController(async () => "unused", {
+        lease: unavailable,
+      });
+
+      const result = await controller.runExplicit({
+        sessionId: "s1",
+        messages: [msg("alice", "one")],
+      });
+
+      expect(result.status).toBe("unavailable");
+      if (result.status === "unavailable") {
+        expect(result.error).toEqual(new Error("lease offline"));
+      }
+    });
   });
 });

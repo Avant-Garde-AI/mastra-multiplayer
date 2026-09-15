@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { ApprovalGate, type ApprovalPolicy } from "./approvals/index.js";
-import { labelBatch, withMultiplayerContext } from "./attribution/index.js";
+import {
+  channelContentToText,
+  labelBatch,
+  withMultiplayerContext,
+} from "./attribution/index.js";
 import { EventBus, type EventBusOptions } from "./bus/event-bus.js";
 import type { MultiplayerBus } from "./bus/bus.js";
 import { TurnController, type Turn, type TurnControllerOptions } from "./concurrency/index.js";
@@ -11,6 +15,8 @@ import { consoleLogger, safeLogger, type Logger } from "./internal/logger.js";
 import type {
   ApprovalRequest,
   AuditAction,
+  ChannelContentPart,
+  ChannelCorrelation,
   InboundMessage,
   Participant,
   ParticipantId,
@@ -66,6 +72,29 @@ export interface TurnContext {
   signal?: AbortSignal;
 }
 
+export interface BatchMessageInput {
+  participantId: ParticipantId;
+  text?: string;
+  content?: ChannelContentPart[];
+  receivedAt: number;
+  correlation?: ChannelCorrelation;
+  metadata?: Record<string, unknown>;
+}
+
+export type AgentRunResult =
+  | { status: "completed"; runId: string; text: string }
+  | { status: "interrupted"; runId: string; text: string }
+  | {
+      status: "failed";
+      runId: string | null;
+      text: string;
+      error: { code: string; message: string };
+    };
+
+export type HostDrivenBatchResult =
+  | AgentRunResult
+  | { status: "busy"; runId: null; text: "" };
+
 /**
  * A shared agent session: one Mastra thread, many humans.
  *
@@ -77,11 +106,12 @@ export class MultiplayerSession {
   readonly store: MultiplayerStore;
   readonly presence: PresenceManager;
   readonly approvals: ApprovalGate;
-  readonly turns: TurnController;
+  readonly turns: TurnController<AgentRunResult>;
 
   private readonly agent: AgentLike;
   private readonly agentId: string;
   private readonly buildStreamOptions: MultiplayerOptions["buildStreamOptions"];
+  private readonly logger: Logger;
 
   constructor(options: MultiplayerOptions) {
     this.agent = options.agent;
@@ -89,6 +119,7 @@ export class MultiplayerSession {
     // Built once and handed to every piece, so a host configures logging in
     // one place rather than per component.
     const logger = safeLogger(options.logger ?? consoleLogger);
+    this.logger = logger;
     this.store = options.store ?? new InMemoryMultiplayerStore();
     this.bus =
       options.bus && "publish" in options.bus
@@ -157,14 +188,24 @@ export class MultiplayerSession {
   async send(input: {
     sessionId: SessionId;
     participantId: ParticipantId;
-    text: string;
+    /** Existing text-only input. Optional when `content` is present. */
+    text?: string;
+    content?: ChannelContentPart[];
+    correlation?: ChannelCorrelation;
     addressedToAgent?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
+    const text = input.content?.length
+      ? channelContentToText(input.content)
+      : input.text?.trim() ?? "";
+    if (!text) throw new RangeError("A message must contain text or media content");
+
     const message: InboundMessage = {
       sessionId: input.sessionId,
       participantId: input.participantId,
-      text: input.text,
+      text,
+      ...(input.content?.length ? { content: input.content } : {}),
+      ...(input.correlation ? { correlation: input.correlation } : {}),
       receivedAt: Date.now(),
       addressedToAgent: input.addressedToAgent ?? true,
       ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -176,12 +217,58 @@ export class MultiplayerSession {
       sessionId: message.sessionId,
       participantId: message.participantId,
       text: message.text,
+      ...(message.content ? { content: message.content } : {}),
       fromAgent: false,
     });
     await this.audit(message.sessionId, "message.sent", message.participantId, {});
 
     if (!message.addressedToAgent) return;
     await this.turns.submit(message);
+  }
+
+  /**
+   * Runs a complete batch selected and retained by a durable host.
+   *
+   * This method never creates an in-memory quiet-window timer. `busy` means no
+   * run started, so the host must keep its cursor unchanged and retry later.
+   */
+  async runBatch(input: {
+    sessionId: SessionId;
+    messages: BatchMessageInput[];
+  }): Promise<HostDrivenBatchResult> {
+    if (input.messages.length === 0) {
+      throw new RangeError("A host-driven batch requires at least one message");
+    }
+
+    const messages: InboundMessage[] = input.messages.map((message) => {
+      const text = message.content?.length
+        ? channelContentToText(message.content)
+        : message.text?.trim() ?? "";
+      if (!text) throw new RangeError("Every batch message must contain text or media");
+      return {
+        sessionId: input.sessionId,
+        participantId: message.participantId,
+        text,
+        ...(message.content?.length ? { content: message.content } : {}),
+        ...(message.correlation ? { correlation: message.correlation } : {}),
+        receivedAt: message.receivedAt,
+        addressedToAgent: true,
+        ...(message.metadata ? { metadata: message.metadata } : {}),
+      };
+    });
+
+    const attempt = await this.turns.runExplicit({
+      sessionId: input.sessionId,
+      messages,
+    });
+    if (attempt.status === "completed") return attempt.value;
+    if (attempt.status === "busy") return { status: "busy", runId: null, text: "" };
+
+    const error = publicError(
+      attempt.error,
+      attempt.status === "unavailable" ? "turn_unavailable" : "turn_failed",
+    );
+    return { status: "failed", runId: null, text: "", error };
   }
 
   /**
@@ -220,12 +307,19 @@ export class MultiplayerSession {
     return resolved;
   }
 
-  private async runTurn(turn: Turn): Promise<void> {
+  private async runTurn(turn: Turn): Promise<AgentRunResult> {
+    const runId = randomUUID();
     const session = await this.store.getSession(turn.sessionId);
-    if (!session) return;
+    if (!session) {
+      return {
+        status: "failed",
+        runId,
+        text: "",
+        error: { code: "session_not_found", message: "Session not found" },
+      };
+    }
 
     const participants = await this.store.listParticipants(turn.sessionId);
-    const runId = randomUUID();
     const signal = this.turns.signalFor(turn.sessionId);
 
     await this.store.updateSession(turn.sessionId, { runningRunId: runId });
@@ -266,6 +360,7 @@ export class MultiplayerSession {
     };
 
     let full = "";
+    let failure: { code: string; message: string } | null = null;
     try {
       const result = await this.agent.stream(prompt, streamOptions);
       for await (const delta of result.textStream) {
@@ -278,9 +373,49 @@ export class MultiplayerSession {
           delta,
         });
       }
+    } catch (error) {
+      failure = publicError(error, "agent_error");
+      this.logger.error("agent run failed", {
+        sessionId: turn.sessionId,
+        runId,
+        error,
+      });
     } finally {
       stopListening();
       await this.store.updateSession(turn.sessionId, { runningRunId: undefined });
+    }
+
+    if (failure) {
+      await this.bus.publish({
+        type: "agent.run.failed",
+        sessionId: turn.sessionId,
+        runId,
+        triggeredBy: null,
+        error: failure,
+      });
+      await this.audit(turn.sessionId, "agent.run.failed", null, {
+        runId,
+        code: failure.code,
+      });
+      return { status: "failed", runId, text: full, error: failure };
+    }
+
+    if (signal?.aborted) {
+      // A direct/cross-instance interrupt already published its own event.
+      // Preemption and lease loss have no caller event, so close the run here.
+      if (signal.reason !== "interrupted") {
+        await this.bus.publish({
+          type: "agent.run.interrupted",
+          sessionId: turn.sessionId,
+          runId,
+          triggeredBy: null,
+        });
+        await this.audit(turn.sessionId, "agent.run.interrupted", null, {
+          runId,
+          reason: String(signal.reason ?? "aborted"),
+        });
+      }
+      return { status: "interrupted", runId, text: full };
     }
 
     if (full.length > 0) {
@@ -300,6 +435,7 @@ export class MultiplayerSession {
       triggeredBy: null,
     });
     await this.audit(turn.sessionId, "agent.run.finished", null, { runId });
+    return { status: "completed", runId, text: full };
   }
 
   private async audit(
@@ -317,6 +453,16 @@ export class MultiplayerSession {
       detail,
     });
   }
+}
+
+function publicError(
+  error: unknown,
+  code: string,
+): { code: string; message: string } {
+  return {
+    code,
+    message: error instanceof Error ? error.message : "Unknown error",
+  };
 }
 
 export function createMultiplayer(options: MultiplayerOptions): MultiplayerSession {

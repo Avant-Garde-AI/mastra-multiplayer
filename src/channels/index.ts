@@ -12,10 +12,16 @@
  * Mastra's `actor` and this package's `Participant`. See
  * [the research](../../docs/roadmap/research/2026-09-07-mastra-apis.md).
  */
+import { createHash } from "node:crypto";
+
+import { channelContentToText } from "../attribution/index.js";
 import { consoleLogger, safeLogger, type Logger } from "../internal/logger.js";
 import type { MultiplayerSession } from "../session.js";
 import type {
+  ChannelContentPart,
+  ChannelCorrelation,
   Participant,
+  ParticipantId,
   ParticipantRole,
   ParticipantSurface,
   SessionId,
@@ -47,7 +53,11 @@ export interface ChannelMessage {
   /** Mastra's thread id for the channel conversation. */
   threadId: string;
   channelId?: string;
-  text: string;
+  /** Compatibility input for text-only adapters. */
+  text?: string;
+  /** Provider-neutral structured content. Takes precedence over `text`. */
+  content?: ChannelContentPart[];
+  correlation?: ChannelCorrelation;
   /** Whether the agent should reply. Default true. */
   addressedToAgent?: boolean;
   metadata?: Record<string, unknown>;
@@ -58,6 +68,13 @@ export interface ChannelParticipantOptions {
   actor: ChannelActor;
   /** Default `editor`. */
   role?: ParticipantRole;
+  /** Override the privacy-safe label used when the provider supplies no name. */
+  fallbackDisplayName?: (actor: ChannelActor) => string;
+}
+
+function anonymousDisplayName(actor: ChannelActor): string {
+  const suffix = createHash("sha256").update(actor.userId).digest("hex").slice(0, 6);
+  return `Participant ${suffix.toUpperCase()}`;
 }
 
 /**
@@ -83,10 +100,11 @@ export function channelParticipant(options: ChannelParticipantOptions): Particip
 
   return {
     id,
-    // Falls back rather than inventing: an actor with no name at all shows its
-    // raw id, which is ugly and honest. A placeholder like "Unknown" would put
-    // the same label on two different people in one roster.
-    displayName: actor.fullName ?? actor.userName ?? actor.userId,
+    displayName:
+      actor.fullName ??
+      actor.userName ??
+      options.fallbackDisplayName?.(actor) ??
+      anonymousDisplayName(actor),
     role: options.role ?? "editor",
     surface,
     resourceId: id,
@@ -150,7 +168,37 @@ export interface ChannelBridgeOptions {
   /** Replace the participant mapping entirely. */
   participant?: (message: ChannelMessage) => Participant | Promise<Participant>;
 
+  /** Passed to the default participant mapper when an actor has no name. */
+  fallbackDisplayName?: (actor: ChannelActor) => string;
+
   logger?: Logger;
+}
+
+export interface ReconcileRosterInput {
+  sessionId: SessionId;
+  /** Only this surface is eligible for removal from an authoritative snapshot. */
+  surface: ParticipantSurface;
+  participants: Participant[];
+  /** Remove surface participants absent from this snapshot. Default false. */
+  authoritative?: boolean;
+}
+
+export interface ReconcileRosterResult {
+  joined: ParticipantId[];
+  updated: ParticipantId[];
+  unchanged: ParticipantId[];
+  removed: ParticipantId[];
+}
+
+/** Normalizes legacy text and structured adapter payloads into content parts. */
+export function normalizeChannelContent(message: ChannelMessage): ChannelContentPart[] {
+  const structured = message.content?.filter((part) =>
+    part.type === "text" ? part.text.trim().length > 0 : true,
+  );
+  if (structured?.length) return structured;
+
+  const text = message.text?.trim();
+  return text ? [{ type: "text", text }] : [];
 }
 
 /**
@@ -188,8 +236,8 @@ export class ChannelBridge {
       return { status: "ignored_bot" };
     }
 
-    // An empty message would join the sender and publish nothing worth reading.
-    if (message.text.trim().length === 0) return { status: "ignored_empty" };
+    const content = normalizeChannelContent(message);
+    if (content.length === 0) return { status: "ignored_empty" };
 
     const sessionId = await this.options.resolveSession(message);
     if (!sessionId) return { status: "ignored_no_session" };
@@ -200,12 +248,66 @@ export class ChannelBridge {
     await this.session.send({
       sessionId,
       participantId: participant.id,
-      text: message.text,
+      text: channelContentToText(content),
+      content,
+      ...(message.correlation ? { correlation: message.correlation } : {}),
       addressedToAgent: message.addressedToAgent ?? true,
       ...(message.metadata ? { metadata: message.metadata } : {}),
     });
 
     return { status: "delivered", sessionId, participant };
+  }
+
+  /**
+   * Reconciles a provider roster snapshot without disturbing participants from
+   * other surfaces. Use `authoritative` only for a complete provider snapshot.
+   */
+  async reconcileRoster(input: ReconcileRosterInput): Promise<ReconcileRosterResult> {
+    const result: ReconcileRosterResult = {
+      joined: [],
+      updated: [],
+      unchanged: [],
+      removed: [],
+    };
+    const ids = new Set<string>();
+
+    for (const participant of input.participants) {
+      if (participant.surface !== input.surface) {
+        throw new RangeError(
+          `Participant ${participant.id} belongs to ${participant.surface}, not ${input.surface}`,
+        );
+      }
+      if (ids.has(participant.id)) {
+        throw new RangeError(`Duplicate participant ${participant.id} in roster snapshot`);
+      }
+      ids.add(participant.id);
+
+      const existing = await this.session.store.getParticipant(
+        input.sessionId,
+        participant.id,
+      );
+      if (!existing) {
+        await this.session.join(input.sessionId, participant);
+        result.joined.push(participant.id);
+      } else if (!sameParticipant(existing, participant)) {
+        await this.session.join(input.sessionId, participant);
+        result.updated.push(participant.id);
+      } else {
+        result.unchanged.push(participant.id);
+      }
+    }
+
+    if (input.authoritative) {
+      const existing = await this.session.store.listParticipants(input.sessionId);
+      for (const participant of existing) {
+        if (participant.surface === input.surface && !ids.has(participant.id)) {
+          await this.session.leave(input.sessionId, participant.id);
+          result.removed.push(participant.id);
+        }
+      }
+    }
+
+    return result;
   }
 
   private async participantFor(message: ChannelMessage): Promise<Participant> {
@@ -216,6 +318,9 @@ export class ChannelBridge {
       surface: message.surface,
       actor: message.actor,
       ...(role ? { role } : {}),
+      ...(this.options.fallbackDisplayName
+        ? { fallbackDisplayName: this.options.fallbackDisplayName }
+        : {}),
     });
   }
 
@@ -236,16 +341,22 @@ export class ChannelBridge {
       participant.id,
     );
 
-    if (
-      existing &&
-      existing.displayName === participant.displayName &&
-      existing.role === participant.role
-    ) {
+    if (existing && sameParticipant(existing, participant)) {
       return;
     }
 
     await this.session.join(sessionId, participant);
   }
+}
+
+function sameParticipant(left: Participant, right: Participant): boolean {
+  return (
+    left.displayName === right.displayName &&
+    left.role === right.role &&
+    left.surface === right.surface &&
+    left.resourceId === right.resourceId &&
+    left.email === right.email
+  );
 }
 
 /** Convenience constructor, matching `createMultiplayer`'s style. */

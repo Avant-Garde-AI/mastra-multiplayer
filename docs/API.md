@@ -74,6 +74,7 @@ over inheritance, so each piece is usable on its own.
 | `join(sessionId, participant)` | → `Participant[]`. Publishes `participant.joined` and records a first heartbeat. |
 | `leave(sessionId, participantId)` | Clears presence, removes from roster, audits. |
 | `send({ sessionId, participantId, text, addressedToAgent?, metadata? })` | Broadcasts to the room, then submits to `TurnController` unless `addressedToAgent` is false. |
+| `runBatch({ sessionId, messages })` | Runs a durable-host-selected batch without an in-memory timer. Returns `completed`, `interrupted`, `failed`, or `busy`. |
 | `interrupt(sessionId, participantId)` | Aborts the run and clears the queue, on whichever instance owns it. Not role-gated. |
 | `sweepExpiredApprovals()` | → resolved `ApprovalRequest[]` across every session. Call from your own scheduler. |
 
@@ -107,8 +108,13 @@ Full treatment in [APPROVALS](./APPROVALS.md).
 
 ## Concurrency
 
-`TurnController` — `submit`, `interrupt`, `signalFor`, `isRunning`,
+`TurnController` — `submit`, `runExplicit`, `interrupt`, `signalFor`, `isRunning`,
 `queueDepth`. Reached as `multiplayer.turns`.
+
+`runExplicit` is the low-level generic primitive. Most hosts should call
+`multiplayer.runBatch()`, which normalizes content and returns an
+`AgentRunResult`. A `busy` result means no run started and no retry was queued;
+the durable host retains the batch and retries it on its own schedule.
 
 ```ts
 interface TurnControllerOptions {

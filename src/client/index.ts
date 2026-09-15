@@ -201,6 +201,7 @@ export class MultiplayerClient {
       "agent.run.started",
       "agent.run.finished",
       "agent.run.interrupted",
+      "agent.run.failed",
       "approval.requested",
       "approval.updated",
       "approval.resolved",
@@ -298,6 +299,7 @@ export class MultiplayerClient {
 
       case "agent.run.finished":
       case "agent.run.interrupted":
+      case "agent.run.failed":
         this.patch({ agentRunning: false, streaming: null });
         break;
 

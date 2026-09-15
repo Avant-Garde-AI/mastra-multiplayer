@@ -161,3 +161,41 @@ a shared session without provoking a reply to every line.
 
 Whatever decides `addressedToAgent` — an @-mention, a UI toggle, a channel
 convention — is your application's call.
+
+## Durable host-driven batches
+
+Minute-scale quiet windows do not belong in `setTimeout`. Let the host persist
+its inbox and deadline, claim a due batch, and submit the complete batch:
+
+```ts
+const result = await multiplayer.runBatch({
+  sessionId,
+  messages: claimedEvents.map((event) => ({
+    participantId: event.participantId,
+    text: event.text,
+    content: event.content,
+    receivedAt: event.receivedAt,
+    correlation: { providerEventId: event.providerEventId },
+  })),
+});
+
+if (result.status === "completed") {
+  await commitCursorAndOutbox(result.runId, result.text);
+} else if (result.status === "busy") {
+  await releaseClaimWithoutAdvancingCursor();
+}
+```
+
+`runBatch` bypasses `mode`, `windowMs`, and the in-process queue. It still uses
+the same attribution, roster context, stream options, turn lease, lifecycle
+events, and audit ledger. Its result is one of:
+
+- `completed`: final text is safe to place in the host's transactional outbox
+- `interrupted`: no assistant message was published; retry policy belongs to the host
+- `failed`: includes a stable error code and a human-readable message
+- `busy`: another local or distributed turn owns the session; no run started
+
+The package does not persist the batch, schedule the quiet window, advance the
+host cursor, or deliver the provider response. See
+[`examples/durable-media-channel/worker.ts`](../examples/durable-media-channel/worker.ts)
+for the complete ownership boundary.

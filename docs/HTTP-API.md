@@ -225,6 +225,7 @@ Every payload carries `type`, `sessionId`, `seq`, and `at`.
 | `agent.run.started` | `runId`, `triggeredBy` |
 | `agent.run.finished` | `runId`, `triggeredBy` |
 | `agent.run.interrupted` | `runId`, `triggeredBy` |
+| `agent.run.failed` | `runId`, `triggeredBy`, `error` |
 | `approval.requested` | `request` |
 | `approval.updated` | `request` |
 | `approval.resolved` | `request` |

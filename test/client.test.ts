@@ -223,6 +223,22 @@ describe("MultiplayerClient", () => {
       expect(c.getState()).toMatchObject({ streaming: null, agentRunning: false });
     });
 
+    it("clears running state when an agent run fails", async () => {
+      const c = await connected();
+
+      stream().emit({ type: "agent.run.started", seq: 2, runId: "r1", triggeredBy: "alice" } as never);
+      stream().emit({
+        type: "agent.run.failed",
+        seq: 3,
+        runId: "r1",
+        triggeredBy: null,
+        error: { code: "agent_error", message: "failed" },
+      } as never);
+
+      expect(c.getState().agentRunning).toBe(false);
+      expect(c.getState().streaming).toBeNull();
+    });
+
     it("keeps a human message while the agent is mid-stream", async () => {
       const c = await connected();
       stream().emit({ type: "agent.run.started", seq: 1, runId: "r1", triggeredBy: "alice" } as never);

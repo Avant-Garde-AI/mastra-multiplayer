@@ -3,6 +3,32 @@
 All notable changes to this package. Dates are the day the work landed on
 `main`.
 
+## Unreleased
+
+### Channels
+- `ChannelMessage` accepts provider-neutral text and media content while keeping
+  the existing text-only call shape compatible. Media-only messages now enter
+  sessions, structured content reaches message events, and the text fallback
+  omits remote URLs and provider ids from prompts.
+- `ChannelBridge.reconcileRoster()` applies complete or partial provider roster
+  snapshots. Authoritative snapshots remove absent members from the declared
+  surface only.
+- Nameless channel actors receive stable pseudonymous display labels by default.
+  Hosts can override the fallback naming policy.
+- `ChannelCorrelation` gives provider event, message, and thread ids a typed
+  path into turn context without rendering them into prompts.
+
+### Concurrency
+- `MultiplayerSession.runBatch()` accepts a complete batch already selected by
+  a durable host and returns the awaited run id, final text, and completion,
+  interruption, failure, or busy state. It bypasses in-memory quiet-window
+  timers while retaining attribution, leases, lifecycle events, and audit.
+- `TurnController.runExplicit()` is the generic lower-level primitive. A losing
+  lease contender receives `busy` without creating a local retry queue, so the
+  host can retain and retry its durable cursor safely.
+- Failed agent runs publish `agent.run.failed`; interrupted runs no longer emit
+  a partial assistant message as though it completed.
+
 ## 0.4.0 — 2026-09-09
 
 **Published as `@avant-garde-ai/mastra-multiplayer`.** The package is scoped to
