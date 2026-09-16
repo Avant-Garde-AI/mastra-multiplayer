@@ -5,16 +5,16 @@ Every exported symbol, by entry point. Types are in
 
 | Entry point | Contains |
 | --- | --- |
-| `@avant-garde-ai/mastra-multiplayer` | Session, approvals, concurrency, presence, attribution, bus, types |
-| `@avant-garde-ai/mastra-multiplayer/server` | `multiplayerRoutes` and its types |
-| `@avant-garde-ai/mastra-multiplayer/client` | `MultiplayerClient` |
-| `@avant-garde-ai/mastra-multiplayer/client/react` | `useMultiplayerSession` |
-| `@avant-garde-ai/mastra-multiplayer/storage` | `MultiplayerStore`, `InMemoryMultiplayerStore` |
-| `@avant-garde-ai/mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
-| `@avant-garde-ai/mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
-| `@avant-garde-ai/mastra-multiplayer/bus/redis` | `RedisEventBus` |
-| `@avant-garde-ai/mastra-multiplayer/channels` | `channelParticipant`, `channelBridge`, `ChannelBridge` |
-| `@avant-garde-ai/mastra-multiplayer/concurrency/redis-lease` | `RedisTurnLease` |
+| `@avant-garde/mastra-multiplayer` | Session, approvals, concurrency, presence, attribution, bus, types |
+| `@avant-garde/mastra-multiplayer/server` | `multiplayerRoutes` and its types |
+| `@avant-garde/mastra-multiplayer/client` | `MultiplayerClient` |
+| `@avant-garde/mastra-multiplayer/client/react` | `useMultiplayerSession` |
+| `@avant-garde/mastra-multiplayer/storage` | `MultiplayerStore`, `InMemoryMultiplayerStore` |
+| `@avant-garde/mastra-multiplayer/storage/conformance` | `conformanceChecks`, `conformanceGroups` |
+| `@avant-garde/mastra-multiplayer/storage/libsql` | `LibSQLMultiplayerStore` |
+| `@avant-garde/mastra-multiplayer/bus/redis` | `RedisEventBus` |
+| `@avant-garde/mastra-multiplayer/channels` | `channelParticipant`, `channelBridge`, `ChannelBridge` |
+| `@avant-garde/mastra-multiplayer/concurrency/redis-lease` | `RedisTurnLease` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
 `src/` imports either — Mastra and Hono types are declared structurally
@@ -198,7 +198,7 @@ others.
 
 ```ts
 import { Redis } from "ioredis";
-import { RedisEventBus } from "@avant-garde-ai/mastra-multiplayer/bus/redis";
+import { RedisEventBus } from "@avant-garde/mastra-multiplayer/bus/redis";
 
 const bus = new RedisEventBus({
   client: new Redis(url),
@@ -293,7 +293,7 @@ No dependency on any chat SDK. Full treatment in [CHANNELS](./CHANNELS.md).
 
 ## Workflows
 
-From `@avant-garde-ai/mastra-multiplayer/workflows`. `@mastra/core` is an optional
+From `@avant-garde/mastra-multiplayer/workflows`. `@mastra/core` is an optional
 peer and is imported by nothing here; the workflow surface is declared
 structurally, per
 [ADR 0004](./decisions/0004-structural-mastra-types.md).
@@ -359,7 +359,7 @@ await store.migrate();   // idempotent
 `@libsql/client` is an optional peer dependency, imported by nothing — the
 client is passed in and `LibSQLLikeClient` is declared structurally, so a real
 `Client` satisfies it without this package ever referencing the driver.
-Verified from a clean install: `@avant-garde-ai/mastra-multiplayer/storage/libsql`
+Verified from a clean install: `@avant-garde/mastra-multiplayer/storage/libsql`
 loads with no `@libsql/client` present. The same holds for `bus/redis` and
 `concurrency/redis-lease`.
 
