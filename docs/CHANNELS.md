@@ -23,7 +23,7 @@ testable with a plain object.
 ## The mapping
 
 ```ts
-import { channelParticipant } from "@avant-garde-ai/mastra-multiplayer/channels";
+import { channelParticipant } from "@avant-garde/mastra-multiplayer/channels";
 
 channelParticipant({
   surface: "slack",
@@ -52,7 +52,7 @@ host already has private aliases such as `Guest 2`.
 ## The bridge
 
 ```ts
-import { channelBridge } from "@avant-garde-ai/mastra-multiplayer/channels";
+import { channelBridge } from "@avant-garde/mastra-multiplayer/channels";
 
 const bridge = channelBridge(multiplayer, {
   resolveSession: ({ threadId }) => sessionForThread(threadId),
