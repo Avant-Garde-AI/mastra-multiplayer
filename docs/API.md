@@ -15,6 +15,8 @@ Every exported symbol, by entry point. Types are in
 | `@avant-garde/mastra-multiplayer/bus/redis` | `RedisEventBus` |
 | `@avant-garde/mastra-multiplayer/channels` | `channelParticipant`, `channelBridge`, `ChannelBridge` |
 | `@avant-garde/mastra-multiplayer/concurrency/redis-lease` | `RedisTurnLease` |
+| `@avant-garde/mastra-multiplayer/reactions` | `ReactionBus`, burst policy, session runner, contracts, in-memory store |
+| `@avant-garde/mastra-multiplayer/reactions/conformance` | `reactionConformanceChecks` |
 
 Peer dependencies `@mastra/core` and `react` are both optional. Nothing in
 `src/` imports either — Mastra and Hono types are declared structurally
@@ -134,6 +136,22 @@ interface TurnControllerOptions {
 returning **false means the lease was lost**, which aborts the run.
 
 Mode selection matters more than the API: [CONCURRENCY](./CONCURRENCY.md).
+
+## Durable reactions
+
+`ReactionBus` coordinates a pure `ReactionPolicy`, transactional
+`ReactionStore`, and side-effect-free `ReactionRunner`. Call `ingest()` from a
+provider adapter and `runNext({ workerId })` from a scheduler or queue worker.
+It owns no timer and never sends provider messages.
+
+`createBurstReactionPolicy()` supplies bounded trailing-edge batching,
+accelerated direct-address and urgent signals, reaction-only silence, and
+zero-or-one response authorization. `createSessionReactionRunner()` adapts a
+claim to `MultiplayerSession.runBatch()`.
+
+`InMemoryReactionStore` is the single-process reference implementation. Durable
+adapters should implement `ReactionStore` and pass `reactionConformanceChecks()`.
+See [Durable reactions](./REACTIONS.md) for the transaction and fencing rules.
 
 ## Presence
 

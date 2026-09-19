@@ -1,6 +1,6 @@
 {
   "name": "@avant-garde/mastra-multiplayer",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Multiplayer primitives for Mastra agents: presence, multi-approver gates, and a shared-session event bus for many humans in one agent session.",
   "keywords": [
     "mastra",
@@ -77,6 +77,14 @@
     "./workflows": {
       "types": "./dist/workflows/index.d.ts",
       "import": "./dist/workflows/index.js"
+    },
+    "./reactions": {
+      "types": "./dist/reactions/index.d.ts",
+      "import": "./dist/reactions/index.js"
+    },
+    "./reactions/conformance": {
+      "types": "./dist/reactions/conformance.d.ts",
+      "import": "./dist/reactions/conformance.js"
     },
     "./package.json": "./package.json"
   },

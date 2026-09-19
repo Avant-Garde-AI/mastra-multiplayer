@@ -13,6 +13,8 @@ export default defineConfig({
     "src/concurrency/redis-lease.ts",
     "src/channels/index.ts",
     "src/workflows/index.ts",
+    "src/reactions/index.ts",
+    "src/reactions/conformance.ts",
   ],
   format: ["esm"],
   dts: true,

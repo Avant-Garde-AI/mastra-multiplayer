@@ -5,6 +5,23 @@ All notable changes to this package. Dates are the day the work landed on
 
 ## Unreleased
 
+## 0.6.0 — 2026-09-19
+
+### Reactions
+- Added a provider-neutral durable reaction runtime for bursty group
+  conversations: versioned pure policies, immutable batches, leased claims,
+  numeric fencing, state-revision checks, response budgets, and atomic
+  zero-or-one response-intent commits.
+- Added `createBurstReactionPolicy()` for trailing quiet windows bounded by a
+  maximum wait, accelerated direct/urgent traffic, batch-size limits, ambient
+  response control, and successful silence for reaction-only traffic.
+- Added `createSessionReactionRunner()` to run claimed evidence through
+  `MultiplayerSession.runBatch()` while leaving provider delivery outside the
+  agent runner.
+- Added `InMemoryReactionStore` and a framework-neutral 12-check reaction-store
+  conformance suite. The existing social `MultiplayerStore` contract remains
+  unchanged.
+
 ## 0.5.0 — 2026-09-15
 
 **First npm release, as `@avant-garde/mastra-multiplayer`.** Earlier versions

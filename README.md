@@ -6,7 +6,7 @@ Mastra already handles the channel side of this well — the Signal API gives yo
 
 That is what this package is.
 
-> Status: `0.5.0`. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
+> Status: `0.6.0`. Pre-1.0 — the API will change, and breaking changes are recorded in the [changelog](./CHANGELOG.md). Not affiliated with the Mastra team.
 
 ## What "multiplayer" means here
 
@@ -65,7 +65,7 @@ const { messages, presence, approvals, send, vote } = useMultiplayerSession({
 
 See [`examples/`](./examples) for a full Mastra server, an approval-gated tool, and a React consumer.
 
-## The three primitives
+## The four primitives
 
 ### 1. Presence and rooms
 
@@ -115,6 +115,33 @@ createMultiplayer({
 Sequencing, not fan-out, is the hard part: clients discard events at or below the highest sequence they have seen, so two instances minting the same number would make them throw away real events while believing they were duplicates. The sequence comes from a Redis `INCR` inside the same script that records and publishes.
 
 Events: `participant.joined`, `participant.left`, `presence.updated`, `message`, `agent.delta`, `agent.run.started|finished|interrupted`, `approval.requested|updated|resolved`.
+
+### 4. Durable conversation reactions
+
+Webhook conversations arrive in bursts, not turns. The reaction runtime retains
+the whole burst, decides when and whether the agent should participate, grants
+one fenced worker claim, and atomically commits zero or one response intent:
+
+```ts
+import {
+  createBurstReactionPolicy,
+  createReactionBus,
+} from "@avant-garde/mastra-multiplayer/reactions";
+
+const reactions = createReactionBus({
+  store: durableReactionStore,
+  policy: createBurstReactionPolicy({ quietMs: 3000, maxWaitMs: 15000 }),
+  runner: proposalRunner,
+});
+
+await reactions.ingest(providerEvent);
+await reactions.runNext({ workerId });
+```
+
+Stable batch ids survive retries, ownership fences reject late workers, consent
+and roster revisions invalidate stale drafts, and successful silence is a real
+outcome. `InMemoryReactionStore` and a 12-check conformance harness ship with
+the package. [Details](./docs/REACTIONS.md).
 
 ## Concurrency: what happens when two people type at once
 
